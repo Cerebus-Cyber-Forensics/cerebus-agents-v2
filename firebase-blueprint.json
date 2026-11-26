@@ -1,0 +1,694 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Authenticated platform user with role-based access control for Admin, Team Leader, or Agent self-service.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth user UID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified Google account email address.",
+          "maxLength": 200
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the authenticated user.",
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "description": "Access tier assigned to the user.",
+          "enum": ["admin", "team_leader", "agent"],
+          "maxLength": 32
+        },
+        "teamLeaderName": {
+          "type": "string",
+          "description": "Assigned team leader name when role is team_leader.",
+          "maxLength": 120
+        },
+        "linkedAgentId": {
+          "type": "string",
+          "description": "Document ID of the linked agent dossier if applicable.",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when user account was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when user account was last updated."
+        }
+      },
+      "required": ["uid", "email", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "AgentRecord": {
+      "title": "AgentRecord",
+      "description": "Complete Cerebus field agent profile including personal identity, uniform sizing, current banking details, and compliance document references.",
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "description": "Unique agent document identifier.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "UID of the agent user who owns this self-service record.",
+          "maxLength": 128
+        },
+        "createdByUid": {
+          "type": "string",
+          "description": "UID of the user who created the agent record.",
+          "maxLength": 128
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of initial agent registration."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest modification."
+        },
+        "emailAddress": {
+          "type": "string",
+          "format": "email",
+          "description": "Primary Email Address used for login and account matching.",
+          "maxLength": 200
+        },
+        "cerebusAgentCode": {
+          "type": "string",
+          "description": "Unique Cerebus agent code identifier.",
+          "maxLength": 40,
+          "pattern": "^[A-Za-z0-9\\-_]+$"
+        },
+        "geographicArea": {
+          "type": "string",
+          "description": "Geographic area or operating region.",
+          "maxLength": 120
+        },
+        "cerebusTeamLeader": {
+          "type": "string",
+          "description": "Assigned Cerebus team leader name.",
+          "maxLength": 120
+        },
+        "firstName": {
+          "type": "string",
+          "description": "Agent legal first name.",
+          "maxLength": 80
+        },
+        "middleNames": {
+          "type": "string",
+          "description": "Agent middle names if any.",
+          "maxLength": 120
+        },
+        "surname": {
+          "type": "string",
+          "description": "Agent legal surname.",
+          "maxLength": 80
+        },
+        "nationality": {
+          "type": "string",
+          "description": "Agent nationality.",
+          "maxLength": 80
+        },
+        "idDocumentType": {
+          "type": "string",
+          "description": "Type of identity document.",
+          "enum": ["National ID", "Passport", "Driver's License", "Asylum / Permit"],
+          "maxLength": 40
+        },
+        "idPassportNumber": {
+          "type": "string",
+          "description": "National ID or Passport number.",
+          "maxLength": 60
+        },
+        "cellphoneNumber": {
+          "type": "string",
+          "description": "Primary cellphone contact number.",
+          "maxLength": 40
+        },
+        "whatsappNumber": {
+          "type": "string",
+          "description": "WhatsApp messaging number.",
+          "maxLength": 40
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Agent contact or notification email.",
+          "maxLength": 200
+        },
+        "tShirtStyle": {
+          "type": "string",
+          "description": "Uniform T-shirt style preference.",
+          "enum": ["Crew Neck", "Golf / Polo", "Fitted Tee", "Long Sleeve", "Hoodie"],
+          "maxLength": 40
+        },
+        "tShirtSize": {
+          "type": "string",
+          "description": "Uniform T-shirt size.",
+          "enum": ["XS", "S", "M", "L", "XL", "2XL", "3XL"],
+          "maxLength": 10
+        },
+        "yourComments": {
+          "type": "string",
+          "description": "Agent or coordinator remarks.",
+          "maxLength": 1000
+        },
+        "bankNameAndCode": {
+          "type": "string",
+          "description": "Bank name and universal branch/clearing code.",
+          "maxLength": 120
+        },
+        "accountHolderName": {
+          "type": "string",
+          "description": "Registered bank account holder name.",
+          "maxLength": 120
+        },
+        "accountType": {
+          "type": "string",
+          "description": "Bank account type.",
+          "enum": ["Cheque / Current", "Savings", "Transmission", "Business"],
+          "maxLength": 40
+        },
+        "accountNumber": {
+          "type": "string",
+          "description": "Bank account number.",
+          "maxLength": 40
+        },
+        "latestBankCycle": {
+          "type": "string",
+          "description": "Latest YYYYMM cycle with an uploaded bank document.",
+          "maxLength": 6,
+          "pattern": "^[0-9]{6}$"
+        },
+        "latestBankDocId": {
+          "type": "string",
+          "description": "Document ID for the latest uploaded monthly bank confirmation.",
+          "maxLength": 128
+        },
+        "latestBankDocName": {
+          "type": "string",
+          "description": "Filename for the latest uploaded monthly bank confirmation.",
+          "maxLength": 200
+        },
+        "idDocId": {
+          "type": "string",
+          "description": "Document ID for the uploaded ID/passport scan.",
+          "maxLength": 128
+        },
+        "idDocName": {
+          "type": "string",
+          "description": "Filename for the uploaded ID/passport scan.",
+          "maxLength": 200
+        },
+        "contractDocId": {
+          "type": "string",
+          "description": "Document ID for the uploaded signed contract.",
+          "maxLength": 128
+        },
+        "contractDocName": {
+          "type": "string",
+          "description": "Filename for the uploaded signed contract.",
+          "maxLength": 200
+        },
+        "photoDocId": {
+          "type": "string",
+          "description": "Document ID for the uploaded agent face photo.",
+          "maxLength": 128
+        },
+        "photoDocName": {
+          "type": "string",
+          "description": "Filename for the uploaded agent face photo.",
+          "maxLength": 200
+        },
+        "photoThumbUrl": {
+          "type": "string",
+          "description": "Compact JPEG data URL thumbnail of the agent's face for instant profile rendering.",
+          "maxLength": 80000
+        },
+        "status": {
+          "type": "string",
+          "description": "Overall agent operational status.",
+          "enum": ["active", "inactive", "pending_review"],
+          "maxLength": 32
+        }
+      },
+      "required": [
+        "agentId",
+        "ownerUid",
+        "createdByUid",
+        "timestamp",
+        "updatedAt",
+        "emailAddress",
+        "cerebusAgentCode",
+        "geographicArea",
+        "cerebusTeamLeader",
+        "firstName",
+        "middleNames",
+        "surname",
+        "nationality",
+        "idDocumentType",
+        "idPassportNumber",
+        "cellphoneNumber",
+        "whatsappNumber",
+        "email",
+        "tShirtStyle",
+        "tShirtSize",
+        "yourComments",
+        "bankNameAndCode",
+        "accountHolderName",
+        "accountType",
+        "accountNumber",
+        "status"
+      ]
+    },
+    "MonthlyConfirmation": {
+      "title": "MonthlyConfirmation",
+      "description": "Monthly YYYYMM banking confirmation, cutoff flag, and payment verification record for an agent.",
+      "type": "object",
+      "properties": {
+        "confirmationId": {
+          "type": "string",
+          "description": "Composite ID of agentId and cycleMonth.",
+          "maxLength": 140,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "agentId": {
+          "type": "string",
+          "description": "Parent agent document ID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "UID of the agent owner.",
+          "maxLength": 128
+        },
+        "agentCode": {
+          "type": "string",
+          "description": "Cerebus agent code snapshot.",
+          "maxLength": 40
+        },
+        "agentName": {
+          "type": "string",
+          "description": "Full name snapshot of the agent.",
+          "maxLength": 200
+        },
+        "emailAddress": {
+          "type": "string",
+          "description": "Primary email address snapshot of the agent.",
+          "maxLength": 200
+        },
+        "cerebusTeamLeader": {
+          "type": "string",
+          "description": "Assigned team leader name snapshot.",
+          "maxLength": 120
+        },
+        "geographicArea": {
+          "type": "string",
+          "description": "Geographic area snapshot.",
+          "maxLength": 120
+        },
+        "cycleMonth": {
+          "type": "string",
+          "description": "Target payment cycle in YYYYMM format.",
+          "maxLength": 6,
+          "pattern": "^[0-9]{6}$"
+        },
+        "cutoffDate": {
+          "type": "string",
+          "description": "Cutoff date (2nd of the month, 5 days before the 7th).",
+          "maxLength": 10
+        },
+        "isLateAfterCutoff": {
+          "type": "boolean",
+          "description": "True if submitted or updated after the 2nd of the cycle month."
+        },
+        "actionKind": {
+          "type": "string",
+          "description": "Whether agent confirmed existing banking details or updated them.",
+          "enum": ["confirmed_existing", "updated_banking"],
+          "maxLength": 32
+        },
+        "bankNameAndCode": {
+          "type": "string",
+          "description": "Confirmed or updated bank name and code.",
+          "maxLength": 120
+        },
+        "accountHolderName": {
+          "type": "string",
+          "description": "Confirmed or updated account holder name.",
+          "maxLength": 120
+        },
+        "accountType": {
+          "type": "string",
+          "description": "Confirmed or updated account type.",
+          "enum": ["Cheque / Current", "Savings", "Transmission", "Business"],
+          "maxLength": 40
+        },
+        "accountNumber": {
+          "type": "string",
+          "description": "Confirmed or updated account number.",
+          "maxLength": 40
+        },
+        "previousBankSummary": {
+          "type": "string",
+          "description": "Snapshot of prior verified bank details when changed.",
+          "maxLength": 240
+        },
+        "bankDocId": {
+          "type": "string",
+          "description": "Uploaded bank proof document ID for this YYYYMM cycle.",
+          "maxLength": 128
+        },
+        "bankDocName": {
+          "type": "string",
+          "description": "Uploaded bank proof filename for this YYYYMM cycle.",
+          "maxLength": 200
+        },
+        "verificationStatus": {
+          "type": "string",
+          "description": "Review state in the monthly payout verification workflow.",
+          "enum": ["pending", "confirmed", "late_flagged", "verified", "rejected"],
+          "maxLength": 32
+        },
+        "submittedByUid": {
+          "type": "string",
+          "description": "UID of the user who submitted this monthly confirmation.",
+          "maxLength": 128
+        },
+        "submittedByName": {
+          "type": "string",
+          "description": "Name of the user who submitted this confirmation.",
+          "maxLength": 120
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of confirmation submission."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest update."
+        },
+        "verifiedByUid": {
+          "type": "string",
+          "description": "UID of Admin or Team Leader who verified or rejected.",
+          "maxLength": 128
+        },
+        "verifiedByName": {
+          "type": "string",
+          "description": "Name of Admin or Team Leader who verified or rejected.",
+          "maxLength": 120
+        },
+        "verifiedAt": {
+          "type": "string",
+          "description": "ISO timestamp string of verification decision.",
+          "maxLength": 40
+        },
+        "reviewerNotes": {
+          "type": "string",
+          "description": "Notes recorded during payment verification or rejection.",
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "confirmationId",
+        "agentId",
+        "ownerUid",
+        "agentCode",
+        "agentName",
+        "emailAddress",
+        "cerebusTeamLeader",
+        "geographicArea",
+        "cycleMonth",
+        "cutoffDate",
+        "isLateAfterCutoff",
+        "actionKind",
+        "bankNameAndCode",
+        "accountHolderName",
+        "accountType",
+        "accountNumber",
+        "verificationStatus",
+        "submittedByUid",
+        "submittedByName",
+        "submittedAt",
+        "updatedAt"
+      ]
+    },
+    "AgentDocument": {
+      "title": "AgentDocument",
+      "description": "Stored compliance document attachment (monthly bank statement, ID/passport, or contract).",
+      "type": "object",
+      "properties": {
+        "docId": {
+          "type": "string",
+          "description": "Document identifier.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "agentId": {
+          "type": "string",
+          "description": "Parent agent document ID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "UID of the agent owner.",
+          "maxLength": 128
+        },
+        "emailAddress": {
+          "type": "string",
+          "description": "Agent primary email for owner matching.",
+          "maxLength": 200
+        },
+        "cerebusTeamLeader": {
+          "type": "string",
+          "description": "Assigned team leader name.",
+          "maxLength": 120
+        },
+          "docCategory": {
+            "type": "string",
+            "description": "Document type slot.",
+            "enum": ["bank_statement", "id_passport", "contract", "profile_photo"],
+            "maxLength": 32
+          },
+        "cycleMonth": {
+          "type": "string",
+          "description": "YYYYMM cycle for bank statements or empty string for static identity/contract docs.",
+          "maxLength": 6
+        },
+        "fileName": {
+          "type": "string",
+          "description": "Original filename.",
+          "maxLength": 200
+        },
+        "mimeType": {
+          "type": "string",
+          "description": "MIME type of the file.",
+          "maxLength": 100
+        },
+        "fileSize": {
+          "type": "number",
+          "description": "Byte size of the encoded file."
+        },
+        "dataUrl": {
+          "type": "string",
+          "description": "Bounded data URL payload for preview and download.",
+          "maxLength": 900000
+        },
+        "uploadedByUid": {
+          "type": "string",
+          "description": "UID of the uploader.",
+          "maxLength": 128
+        },
+        "uploadedByName": {
+          "type": "string",
+          "description": "Name of the uploader.",
+          "maxLength": 120
+        },
+        "uploadedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of document upload."
+        }
+      },
+      "required": [
+        "docId",
+        "agentId",
+        "ownerUid",
+        "emailAddress",
+        "cerebusTeamLeader",
+        "docCategory",
+        "cycleMonth",
+        "fileName",
+        "mimeType",
+        "fileSize",
+        "dataUrl",
+        "uploadedByUid",
+        "uploadedByName",
+        "uploadedAt"
+      ]
+    },
+    "AuditLogEntry": {
+      "title": "AuditLogEntry",
+      "description": "Immutable paper trail log recording who changed what and when across agent profiles, banking details, documents, and payment verifications.",
+      "type": "object",
+      "properties": {
+        "logId": {
+          "type": "string",
+          "description": "Audit log document identifier.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the event occurred."
+        },
+        "actorUid": {
+          "type": "string",
+          "description": "UID of the user who performed the action.",
+          "maxLength": 128
+        },
+        "actorName": {
+          "type": "string",
+          "description": "Display name of the actor.",
+          "maxLength": 120
+        },
+        "actorEmail": {
+          "type": "string",
+          "description": "Email of the actor.",
+          "maxLength": 200
+        },
+        "actorRole": {
+          "type": "string",
+          "description": "Role of the actor at the time of change.",
+          "enum": ["admin", "team_leader", "agent"],
+          "maxLength": 32
+        },
+        "agentId": {
+          "type": "string",
+          "description": "Target agent document ID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "UID of the agent owner.",
+          "maxLength": 128
+        },
+        "emailAddress": {
+          "type": "string",
+          "description": "Target agent primary email.",
+          "maxLength": 200
+        },
+        "agentCode": {
+          "type": "string",
+          "description": "Target agent Cerebus code.",
+          "maxLength": 40
+        },
+        "agentName": {
+          "type": "string",
+          "description": "Target agent full name.",
+          "maxLength": 200
+        },
+        "cerebusTeamLeader": {
+          "type": "string",
+          "description": "Target agent team leader.",
+          "maxLength": 120
+        },
+        "actionType": {
+          "type": "string",
+          "description": "Categorized audit event type.",
+          "enum": [
+            "agent_created",
+            "personal_info_updated",
+            "banking_updated",
+            "monthly_confirmed",
+            "document_uploaded",
+            "payment_verified",
+            "payment_rejected",
+            "role_updated"
+          ],
+          "maxLength": 40
+        },
+        "cycleMonth": {
+          "type": "string",
+          "description": "Associated YYYYMM cycle or empty string.",
+          "maxLength": 6
+        },
+        "isLateAfterCutoff": {
+          "type": "boolean",
+          "description": "Whether the logged action happened after the 2nd cutoff."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Human-readable description of the change.",
+          "maxLength": 500
+        },
+        "changes": {
+          "type": "array",
+          "description": "Bounded list of field-level diffs ({ field, previousValue, newValue })."
+        }
+      },
+      "required": [
+        "logId",
+        "timestamp",
+        "actorUid",
+        "actorName",
+        "actorEmail",
+        "actorRole",
+        "agentId",
+        "ownerUid",
+        "emailAddress",
+        "agentCode",
+        "agentName",
+        "cerebusTeamLeader",
+        "actionType",
+        "cycleMonth",
+        "isLateAfterCutoff",
+        "summary",
+        "changes"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Authenticated users and their assigned roles (admin, team_leader, agent)."
+    },
+    "/agents/{agentId}": {
+      "schema": { "$ref": "#/entities/AgentRecord" },
+      "description": "Master Cerebus agent records with all 24 onboarding, personal, uniform, banking, and document pointer fields."
+    },
+    "/monthly_confirmations/{confirmationId}": {
+      "schema": { "$ref": "#/entities/MonthlyConfirmation" },
+      "description": "Monthly YYYYMM banking detail confirmations, cutoff flags, and verification statuses."
+    },
+    "/agent_documents/{docId}": {
+      "schema": { "$ref": "#/entities/AgentDocument" },
+      "description": "Uploaded compliance files (bank statement per YYYYMM, ID/passport, and contract)."
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLogEntry" },
+      "description": "Append-only paper trail logging who changed what and when."
+    }
+  }
+}

@@ -1,0 +1,561 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny everything not explicitly matched
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Global Primitives & Role Helpers
+    // -------------------------------------------------------------------------
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 140 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn()
+        && ('email_verified' in request.auth.token)
+        && request.auth.token.email_verified == true
+        && ('email' in request.auth.token)
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'sikhosana.ts@gmail.com';
+    }
+
+    function hasUserDoc() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (hasUserDoc() && ('role' in userDoc()) && userDoc().role == 'admin');
+    }
+
+    function isTeamLeaderFor(leaderName) {
+      return hasUserDoc()
+        && ('role' in userDoc())
+        && userDoc().role == 'team_leader'
+        && ('teamLeaderName' in userDoc())
+        && userDoc().teamLeaderName == leaderName;
+    }
+
+    function isAgentRecordOwner(data) {
+      return isSignedIn() && (
+        (('ownerUid' in data) && data.ownerUid == request.auth.uid) ||
+        (
+          ('email_verified' in request.auth.token) &&
+          request.auth.token.email_verified == true &&
+          ('emailAddress' in data) &&
+          data.emailAddress is string &&
+          ('email' in request.auth.token) &&
+          request.auth.token.email is string &&
+          data.emailAddress.lower() == request.auth.token.email.lower()
+        )
+      );
+    }
+
+    function isOptionalString(data, field, maxLen) {
+      return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isNewAgentBatchCreate(agentId) {
+      return !exists(/databases/$(database)/documents/agents/$(agentId))
+        && existsAfter(/databases/$(database)/documents/agents/$(agentId));
+    }
+
+    function agentExistsOrCreatedInBatch(agentId) {
+      return exists(/databases/$(database)/documents/agents/$(agentId))
+        || existsAfter(/databases/$(database)/documents/agents/$(agentId));
+    }
+
+    function parentAgentData(agentId) {
+      return exists(/databases/$(database)/documents/agents/$(agentId))
+        ? get(/databases/$(database)/documents/agents/$(agentId)).data
+        : getAfter(/databases/$(database)/documents/agents/$(agentId)).data;
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity Validation Blueprints
+    // -------------------------------------------------------------------------
+
+    function isValidUserAccount(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'teamLeaderName', 'linkedAgentId', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && data.role in ['admin', 'team_leader', 'agent']
+        && isOptionalString(data, 'teamLeaderName', 120)
+        && isOptionalString(data, 'linkedAgentId', 128)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAgentRecord(data) {
+      return data.keys().hasAll([
+          'agentId', 'ownerUid', 'createdByUid', 'timestamp', 'updatedAt',
+          'emailAddress', 'cerebusAgentCode', 'geographicArea', 'cerebusTeamLeader',
+          'firstName', 'middleNames', 'surname', 'nationality',
+          'idDocumentType', 'idPassportNumber', 'cellphoneNumber', 'whatsappNumber',
+          'email', 'tShirtStyle', 'tShirtSize', 'yourComments',
+          'bankNameAndCode', 'accountHolderName', 'accountType', 'accountNumber', 'status'
+        ])
+        && data.keys().hasOnly([
+          'agentId', 'ownerUid', 'createdByUid', 'timestamp', 'updatedAt',
+          'emailAddress', 'cerebusAgentCode', 'geographicArea', 'cerebusTeamLeader',
+          'firstName', 'middleNames', 'surname', 'nationality',
+          'idDocumentType', 'idPassportNumber', 'cellphoneNumber', 'whatsappNumber',
+          'email', 'tShirtStyle', 'tShirtSize', 'yourComments',
+          'bankNameAndCode', 'accountHolderName', 'accountType', 'accountNumber',
+          'latestBankCycle', 'latestBankDocId', 'latestBankDocName',
+          'idDocId', 'idDocName', 'contractDocId', 'contractDocName',
+          'photoDocId', 'photoDocName', 'photoThumbUrl', 'status'
+        ])
+        && isValidId(data.agentId)
+        && data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128
+        && data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128
+        && data.timestamp is timestamp
+        && data.updatedAt is timestamp
+        && data.emailAddress is string && data.emailAddress.size() >= 3 && data.emailAddress.size() <= 200
+        && data.cerebusAgentCode is string && data.cerebusAgentCode.size() >= 2 && data.cerebusAgentCode.size() <= 40 && data.cerebusAgentCode.matches('^[A-Za-z0-9\\-_]+$')
+        && data.geographicArea is string && data.geographicArea.size() >= 1 && data.geographicArea.size() <= 120
+        && data.cerebusTeamLeader is string && data.cerebusTeamLeader.size() >= 1 && data.cerebusTeamLeader.size() <= 120
+        && data.firstName is string && data.firstName.size() >= 1 && data.firstName.size() <= 80
+        && data.middleNames is string && data.middleNames.size() <= 120
+        && data.surname is string && data.surname.size() >= 1 && data.surname.size() <= 80
+        && data.nationality is string && data.nationality.size() >= 1 && data.nationality.size() <= 80
+        && data.idDocumentType in ['National ID', 'Passport', "Driver's License", 'Asylum / Permit']
+        && data.idPassportNumber is string && data.idPassportNumber.size() >= 3 && data.idPassportNumber.size() <= 60
+        && data.cellphoneNumber is string && data.cellphoneNumber.size() >= 5 && data.cellphoneNumber.size() <= 40
+        && data.whatsappNumber is string && data.whatsappNumber.size() <= 40
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && data.tShirtStyle in ['Crew Neck', 'Golf / Polo', 'Fitted Tee', 'Long Sleeve', 'Hoodie']
+        && data.tShirtSize in ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL']
+        && data.yourComments is string && data.yourComments.size() <= 1000
+        && data.bankNameAndCode is string && data.bankNameAndCode.size() >= 2 && data.bankNameAndCode.size() <= 120
+        && data.accountHolderName is string && data.accountHolderName.size() >= 2 && data.accountHolderName.size() <= 120
+        && data.accountType in ['Cheque / Current', 'Savings', 'Transmission', 'Business']
+        && data.accountNumber is string && data.accountNumber.size() >= 4 && data.accountNumber.size() <= 40
+        && data.status in ['active', 'inactive', 'pending_review']
+        && isOptionalString(data, 'latestBankCycle', 6)
+        && isOptionalString(data, 'latestBankDocId', 128)
+        && isOptionalString(data, 'latestBankDocName', 200)
+        && isOptionalString(data, 'idDocId', 128)
+        && isOptionalString(data, 'idDocName', 200)
+        && isOptionalString(data, 'contractDocId', 128)
+        && isOptionalString(data, 'contractDocName', 200)
+        && isOptionalString(data, 'photoDocId', 128)
+        && isOptionalString(data, 'photoDocName', 200)
+        && isOptionalString(data, 'photoThumbUrl', 80000);
+    }
+
+    function isValidMonthlyConfirmation(data) {
+      return data.keys().hasAll([
+          'confirmationId', 'agentId', 'ownerUid', 'agentCode', 'agentName',
+          'emailAddress', 'cerebusTeamLeader', 'geographicArea', 'cycleMonth',
+          'cutoffDate', 'isLateAfterCutoff', 'actionKind', 'bankNameAndCode',
+          'accountHolderName', 'accountType', 'accountNumber', 'verificationStatus',
+          'submittedByUid', 'submittedByName', 'submittedAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'confirmationId', 'agentId', 'ownerUid', 'agentCode', 'agentName',
+          'emailAddress', 'cerebusTeamLeader', 'geographicArea', 'cycleMonth',
+          'cutoffDate', 'isLateAfterCutoff', 'actionKind', 'bankNameAndCode',
+          'accountHolderName', 'accountType', 'accountNumber', 'previousBankSummary',
+          'bankDocId', 'bankDocName', 'verificationStatus', 'submittedByUid',
+          'submittedByName', 'submittedAt', 'updatedAt', 'verifiedByUid',
+          'verifiedByName', 'verifiedAt', 'reviewerNotes'
+        ])
+        && isValidId(data.confirmationId)
+        && isValidId(data.agentId)
+        && data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128
+        && data.agentCode is string && data.agentCode.size() >= 2 && data.agentCode.size() <= 40
+        && data.agentName is string && data.agentName.size() >= 2 && data.agentName.size() <= 200
+        && data.emailAddress is string && data.emailAddress.size() >= 3 && data.emailAddress.size() <= 200
+        && data.cerebusTeamLeader is string && data.cerebusTeamLeader.size() >= 1 && data.cerebusTeamLeader.size() <= 120
+        && data.geographicArea is string && data.geographicArea.size() >= 1 && data.geographicArea.size() <= 120
+        && data.cycleMonth is string && data.cycleMonth.matches('^[0-9]{6}$')
+        && data.cutoffDate is string && data.cutoffDate.size() == 10
+        && data.isLateAfterCutoff is bool
+        && data.actionKind in ['confirmed_existing', 'updated_banking']
+        && data.bankNameAndCode is string && data.bankNameAndCode.size() >= 2 && data.bankNameAndCode.size() <= 120
+        && data.accountHolderName is string && data.accountHolderName.size() >= 2 && data.accountHolderName.size() <= 120
+        && data.accountType in ['Cheque / Current', 'Savings', 'Transmission', 'Business']
+        && data.accountNumber is string && data.accountNumber.size() >= 4 && data.accountNumber.size() <= 40
+        && data.verificationStatus in ['pending', 'confirmed', 'late_flagged', 'verified', 'rejected']
+        && data.submittedByUid is string && data.submittedByUid.size() >= 1 && data.submittedByUid.size() <= 128
+        && data.submittedByName is string && data.submittedByName.size() >= 1 && data.submittedByName.size() <= 120
+        && data.submittedAt is timestamp
+        && data.updatedAt is timestamp
+        && isOptionalString(data, 'previousBankSummary', 240)
+        && isOptionalString(data, 'bankDocId', 128)
+        && isOptionalString(data, 'bankDocName', 200)
+        && isOptionalString(data, 'verifiedByUid', 128)
+        && isOptionalString(data, 'verifiedByName', 120)
+        && isOptionalString(data, 'verifiedAt', 40)
+        && isOptionalString(data, 'reviewerNotes', 500);
+    }
+
+    function isValidAgentDocument(data) {
+      return data.keys().hasAll([
+          'docId', 'agentId', 'ownerUid', 'emailAddress', 'cerebusTeamLeader',
+          'docCategory', 'cycleMonth', 'fileName', 'mimeType', 'fileSize',
+          'dataUrl', 'uploadedByUid', 'uploadedByName', 'uploadedAt'
+        ])
+        && data.keys().hasOnly([
+          'docId', 'agentId', 'ownerUid', 'emailAddress', 'cerebusTeamLeader',
+          'docCategory', 'cycleMonth', 'fileName', 'mimeType', 'fileSize',
+          'dataUrl', 'uploadedByUid', 'uploadedByName', 'uploadedAt'
+        ])
+        && isValidId(data.docId)
+        && isValidId(data.agentId)
+        && data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128
+        && data.emailAddress is string && data.emailAddress.size() >= 3 && data.emailAddress.size() <= 200
+        && data.cerebusTeamLeader is string && data.cerebusTeamLeader.size() >= 1 && data.cerebusTeamLeader.size() <= 120
+        && data.docCategory in ['bank_statement', 'id_passport', 'contract', 'profile_photo']
+        && data.cycleMonth is string && data.cycleMonth.size() <= 6
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 200
+        && data.mimeType is string && data.mimeType.size() >= 3 && data.mimeType.size() <= 100
+        && data.fileSize is number && data.fileSize > 0 && data.fileSize <= 800000
+        && data.dataUrl is string && data.dataUrl.size() >= 10 && data.dataUrl.size() <= 900000
+        && data.uploadedByUid is string && data.uploadedByUid.size() >= 1 && data.uploadedByUid.size() <= 128
+        && data.uploadedByName is string && data.uploadedByName.size() >= 1 && data.uploadedByName.size() <= 120
+        && data.uploadedAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll([
+          'logId', 'timestamp', 'actorUid', 'actorName', 'actorEmail', 'actorRole',
+          'agentId', 'ownerUid', 'emailAddress', 'agentCode', 'agentName',
+          'cerebusTeamLeader', 'actionType', 'cycleMonth', 'isLateAfterCutoff',
+          'summary', 'changes'
+        ])
+        && data.keys().hasOnly([
+          'logId', 'timestamp', 'actorUid', 'actorName', 'actorEmail', 'actorRole',
+          'agentId', 'ownerUid', 'emailAddress', 'agentCode', 'agentName',
+          'cerebusTeamLeader', 'actionType', 'cycleMonth', 'isLateAfterCutoff',
+          'summary', 'changes'
+        ])
+        && isValidId(data.logId)
+        && data.timestamp is timestamp
+        && data.actorUid is string && data.actorUid.size() >= 1 && data.actorUid.size() <= 128
+        && data.actorName is string && data.actorName.size() >= 1 && data.actorName.size() <= 120
+        && data.actorEmail is string && data.actorEmail.size() >= 3 && data.actorEmail.size() <= 200
+        && data.actorRole in ['admin', 'team_leader', 'agent']
+        && isValidId(data.agentId)
+        && data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128
+        && data.emailAddress is string && data.emailAddress.size() >= 3 && data.emailAddress.size() <= 200
+        && data.agentCode is string && data.agentCode.size() >= 2 && data.agentCode.size() <= 40
+        && data.agentName is string && data.agentName.size() >= 2 && data.agentName.size() <= 200
+        && data.cerebusTeamLeader is string && data.cerebusTeamLeader.size() >= 1 && data.cerebusTeamLeader.size() <= 120
+        && data.actionType in [
+          'agent_created', 'personal_info_updated', 'banking_updated',
+          'monthly_confirmed', 'document_uploaded', 'payment_verified',
+          'payment_rejected', 'role_updated'
+        ]
+        && data.cycleMonth is string && data.cycleMonth.size() <= 6
+        && data.isLateAfterCutoff is bool
+        && data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 500
+        && data.changes is list && data.changes.size() <= 30
+        && (data.changes.size() == 0 || data.changes[0] is map);
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+
+    match /users/{uid} {
+      allow get: if isSignedIn() && isValidId(uid) && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn()
+        && isValidId(uid)
+        && isValidUserAccount(incoming())
+        && request.auth.uid == uid
+        && incoming().uid == uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (isBootstrappedAdmin() && incoming().role == 'admin') ||
+          incoming().role == 'agent'
+        );
+
+      allow update: if isSignedIn()
+        && isValidId(uid)
+        && isValidUserAccount(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            request.auth.uid == uid
+            && incoming().role == existing().role
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'linkedAgentId', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(uid) && existing().role == 'agent';
+    }
+
+    match /agents/{agentId} {
+      allow get: if isSignedIn() && isValidId(agentId) && (
+        isAdmin() ||
+        isTeamLeaderFor(existing().cerebusTeamLeader) ||
+        isAgentRecordOwner(existing())
+      );
+
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        isTeamLeaderFor(resource.data.cerebusTeamLeader) ||
+        isAgentRecordOwner(resource.data)
+      );
+
+      allow create: if isValidId(agentId)
+        && isValidAgentRecord(incoming())
+        && incoming().agentId == agentId
+        && incoming().timestamp == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (
+            isSignedIn()
+            && incoming().createdByUid == request.auth.uid
+            && (
+              isAdmin() ||
+              isTeamLeaderFor(incoming().cerebusTeamLeader) ||
+              (incoming().ownerUid == request.auth.uid && incoming().status == 'active')
+            )
+          ) ||
+          (
+            incoming().ownerUid == 'public_signup'
+            && incoming().createdByUid == 'public_signup'
+            && incoming().status == 'active'
+          )
+        );
+
+      allow update: if isSignedIn()
+        && isValidId(agentId)
+        && isValidAgentRecord(incoming())
+        && incoming().agentId == existing().agentId
+        && incoming().createdByUid == existing().createdByUid
+        && incoming().timestamp == existing().timestamp
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isTeamLeaderFor(existing().cerebusTeamLeader)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'geographicArea', 'firstName', 'middleNames', 'surname', 'nationality',
+              'idDocumentType', 'idPassportNumber', 'cellphoneNumber', 'whatsappNumber',
+              'email', 'tShirtStyle', 'tShirtSize', 'yourComments',
+              'bankNameAndCode', 'accountHolderName', 'accountType', 'accountNumber',
+              'latestBankCycle', 'latestBankDocId', 'latestBankDocName',
+              'idDocId', 'idDocName', 'contractDocId', 'contractDocName',
+              'photoDocId', 'photoDocName', 'photoThumbUrl', 'status', 'updatedAt'
+            ])
+          ) ||
+          (
+            isAgentRecordOwner(existing())
+            && (incoming().ownerUid == existing().ownerUid || incoming().ownerUid == request.auth.uid)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'ownerUid', 'geographicArea', 'firstName', 'middleNames', 'surname', 'nationality',
+              'idDocumentType', 'idPassportNumber', 'cellphoneNumber', 'whatsappNumber',
+              'email', 'tShirtStyle', 'tShirtSize', 'yourComments',
+              'bankNameAndCode', 'accountHolderName', 'accountType', 'accountNumber',
+              'latestBankCycle', 'latestBankDocId', 'latestBankDocName',
+              'idDocId', 'idDocName', 'contractDocId', 'contractDocName',
+              'photoDocId', 'photoDocName', 'photoThumbUrl', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(agentId);
+    }
+
+    match /monthly_confirmations/{confirmationId} {
+      allow get: if isSignedIn() && isValidId(confirmationId) && (
+        isAdmin() ||
+        isTeamLeaderFor(existing().cerebusTeamLeader) ||
+        isAgentRecordOwner(existing())
+      );
+
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        isTeamLeaderFor(resource.data.cerebusTeamLeader) ||
+        isAgentRecordOwner(resource.data)
+      );
+
+      allow create: if isValidId(confirmationId)
+        && isValidMonthlyConfirmation(incoming())
+        && incoming().confirmationId == confirmationId
+        && incoming().submittedAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (
+            isSignedIn()
+            && agentExistsOrCreatedInBatch(incoming().agentId)
+            && incoming().submittedByUid == request.auth.uid
+            && (
+              isAdmin() ||
+              (
+                (
+                  isTeamLeaderFor(parentAgentData(incoming().agentId).cerebusTeamLeader) ||
+                  (
+                    isAgentRecordOwner(parentAgentData(incoming().agentId)) &&
+                    isAgentRecordOwner(incoming())
+                  )
+                )
+                && incoming().verificationStatus in ['pending', 'confirmed', 'late_flagged']
+              )
+            )
+          ) ||
+          (
+            isNewAgentBatchCreate(incoming().agentId)
+            && incoming().confirmationId == (incoming().agentId + '_' + incoming().cycleMonth)
+            && incoming().ownerUid == 'public_signup'
+            && incoming().submittedByUid == 'public_signup'
+            && incoming().verificationStatus in ['confirmed', 'late_flagged']
+            && incoming().verifiedByUid == ''
+            && incoming().verifiedByName == ''
+            && incoming().verifiedAt == ''
+          )
+        );
+
+      allow update: if isSignedIn()
+        && isValidId(confirmationId)
+        && isValidMonthlyConfirmation(incoming())
+        && incoming().confirmationId == existing().confirmationId
+        && incoming().agentId == existing().agentId
+        && incoming().cycleMonth == existing().cycleMonth
+        && incoming().submittedAt == existing().submittedAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isTeamLeaderFor(existing().cerebusTeamLeader)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'verificationStatus', 'verifiedByUid', 'verifiedByName', 'verifiedAt', 'reviewerNotes', 'updatedAt'
+            ])
+          ) ||
+          (
+            isAgentRecordOwner(existing())
+            && existing().verificationStatus != 'verified'
+            && incoming().verificationStatus in ['confirmed', 'late_flagged']
+            && (incoming().ownerUid == existing().ownerUid || incoming().ownerUid == request.auth.uid)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'ownerUid', 'actionKind', 'isLateAfterCutoff', 'bankNameAndCode',
+              'accountHolderName', 'accountType', 'accountNumber', 'previousBankSummary',
+              'bankDocId', 'bankDocName', 'verificationStatus', 'submittedByUid',
+              'submittedByName', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(confirmationId);
+    }
+
+    match /agent_documents/{docId} {
+      allow get: if isSignedIn() && isValidId(docId) && (
+        isAdmin() ||
+        isTeamLeaderFor(existing().cerebusTeamLeader) ||
+        isAgentRecordOwner(existing())
+      );
+
+      allow list: if isAdmin();
+
+      allow create: if isValidId(docId)
+        && isValidAgentDocument(incoming())
+        && incoming().docId == docId
+        && incoming().uploadedAt == request.time
+        && (
+          (
+            isSignedIn()
+            && agentExistsOrCreatedInBatch(incoming().agentId)
+            && incoming().uploadedByUid == request.auth.uid
+            && (
+              isAdmin() ||
+              isTeamLeaderFor(parentAgentData(incoming().agentId).cerebusTeamLeader) ||
+              (
+                isAgentRecordOwner(parentAgentData(incoming().agentId)) &&
+                isAgentRecordOwner(incoming())
+              )
+            )
+          ) ||
+          (
+            isNewAgentBatchCreate(incoming().agentId)
+            && incoming().ownerUid == 'public_signup'
+            && incoming().uploadedByUid == 'public_signup'
+          )
+        );
+
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(docId);
+    }
+
+    match /audit_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && (
+        isAdmin() ||
+        isTeamLeaderFor(existing().cerebusTeamLeader) ||
+        isAgentRecordOwner(existing())
+      );
+
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        isTeamLeaderFor(resource.data.cerebusTeamLeader) ||
+        isAgentRecordOwner(resource.data)
+      );
+
+      allow create: if isValidId(logId)
+        && isValidAuditLog(incoming())
+        && incoming().logId == logId
+        && incoming().timestamp == request.time
+        && (
+          (
+            isSignedIn()
+            && incoming().actorUid == request.auth.uid
+            && (
+              isAdmin() ||
+              (
+                agentExistsOrCreatedInBatch(incoming().agentId) &&
+                (
+                  isTeamLeaderFor(parentAgentData(incoming().agentId).cerebusTeamLeader) ||
+                  (
+                    isAgentRecordOwner(parentAgentData(incoming().agentId)) &&
+                    isAgentRecordOwner(incoming())
+                  )
+                )
+              )
+            )
+          ) ||
+          (
+            isNewAgentBatchCreate(incoming().agentId)
+            && incoming().actorUid == 'public_signup'
+            && incoming().ownerUid == 'public_signup'
+            && incoming().actorRole == 'agent'
+            && incoming().actionType == 'agent_created'
+          )
+        );
+
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(logId);
+    }
+  }
+}

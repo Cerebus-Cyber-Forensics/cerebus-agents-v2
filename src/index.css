@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-cerebus-cobalt: #0812b8;
+  --color-cerebus-cobalt-dark: #060e94;
+  --color-cerebus-obsidian: #0b1120;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: #f8fafc;
+    color: #0f172a;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@keyframes cerebus-scan {
+  0%, 100% {
+    opacity: 0.28;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(1.5px);
+  }
+}
+
+@keyframes cerebus-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(260%);
+  }
+}
+
+.cerebus-scan-line {
+  animation: cerebus-scan 1.3s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.cerebus-progress-bar {
+  animation: cerebus-progress 1.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cerebus-scan-line,
+  .cerebus-progress-bar {
+    animation: none;
+  }
+}

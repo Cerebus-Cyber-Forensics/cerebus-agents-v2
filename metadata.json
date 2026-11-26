@@ -1,0 +1,6 @@
+{
+  "name": "Cerebus Payment & Compliance Ledger",
+  "description": "Monthly staff payment confirmation, banking verification, agent onboarding, compliance documentation, and immutable audit trail ledger for Cerebus teams.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
