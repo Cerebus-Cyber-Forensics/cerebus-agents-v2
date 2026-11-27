@@ -179,7 +179,7 @@ export function TeamAccessView({
               Reset Demo Database
             </h3>
             <p className="text-xs text-slate-600">
-              Permanently remove all {agentCount} agent record{agentCount === 1 ? '' : 's'}, monthly confirmations, uploaded documents, and {logCount} audit log{logCount === 1 ? '' : 's'} to start from a clean database. Admin and Team Leader accounts are kept.
+              Permanently remove all {agentCount} agent record{agentCount === 1 ? '' : 's'}, banking confirmations, uploaded documents, and {logCount} audit log{logCount === 1 ? '' : 's'} to start from a clean database. Admin and Team Leader accounts are kept.
             </p>
           </div>
           <button

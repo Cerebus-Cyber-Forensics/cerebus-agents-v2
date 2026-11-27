@@ -34,7 +34,7 @@ import {
   TShirtStyle,
   UserAccount,
 } from '../types';
-import { getAgentFullName, getCutoffStatus } from '../utils/cycleUtils';
+import { getAgentFullName } from '../utils/cycleUtils';
 import { processProfilePhotoFile, processUploadFile } from '../utils/fileUtils';
 import { ContractTermsModal } from './ContractTermsModal';
 import {
@@ -375,7 +375,6 @@ export function AgentFormModal({
           effectiveActor,
           { selfSignup, publicSignup },
         );
-        const cutoff = getCutoffStatus(activeCycle);
         setShowContractPopup(false);
         const upperCode = cerebusAgentCode.trim().toUpperCase();
         onSuccess(
@@ -389,7 +388,7 @@ export function AgentFormModal({
             agentCode: upperCode,
             fullName: computedFullName,
             cycleMonth: activeCycle,
-            isLateAfterCutoff: cutoff.isAfterCutoff,
+            isLateAfterCutoff: false,
             credentials: createdResult.credentials,
           });
           onClose?.();
@@ -1118,7 +1117,7 @@ export function AgentFormModal({
               Cerebus Agent Onboarding Form
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Complete your personal details, uniform sizing, payout banking account, and compliance documents for cycle {activeCycle}.
+              Complete your personal details, uniform sizing, payout banking account, and compliance documents.
             </p>
           </div>
           {formContent}

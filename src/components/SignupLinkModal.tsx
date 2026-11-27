@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { Check, Copy, Link2, X } from 'lucide-react';
-import { formatCycleLabel, getCycleOptions } from '../utils/cycleUtils';
 
 interface SignupLinkModalProps {
   activeCycle: string;
@@ -10,24 +9,17 @@ interface SignupLinkModalProps {
 }
 
 export function SignupLinkModal({
-  activeCycle,
   teamLeaderOptions,
   onClose,
   onToast,
 }: SignupLinkModalProps) {
   const [teamLeader, setTeamLeader] = useState('');
   const [geographicArea, setGeographicArea] = useState('');
-  const [cycle, setCycle] = useState(activeCycle);
   const [copied, setCopied] = useState(false);
-
-  const cycleOptions = useMemo(() => getCycleOptions(), []);
 
   const signupUrl = useMemo(() => {
     const url = new URL(window.location.origin);
     url.searchParams.set('signup', 'agent');
-    if (cycle && cycle !== activeCycle) {
-      url.searchParams.set('cycle', cycle);
-    }
     if (teamLeader.trim()) {
       url.searchParams.set('tl', teamLeader.trim());
     }
@@ -35,7 +27,7 @@ export function SignupLinkModal({
       url.searchParams.set('area', geographicArea.trim());
     }
     return url.toString();
-  }, [cycle, activeCycle, teamLeader, geographicArea]);
+  }, [teamLeader, geographicArea]);
 
   const handleCopy = async () => {
     try {
@@ -115,22 +107,6 @@ export function SignupLinkModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Target Payment Cycle
-                </label>
-                <select
-                  value={cycle}
-                  onChange={(e) => setCycle(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                >
-                  {cycleOptions.map((c) => (
-                    <option key={c} value={c}>
-                      {formatCycleLabel(c)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">
                   Pre-fill Team Leader
                 </label>
                 <input
@@ -147,7 +123,7 @@ export function SignupLinkModal({
                   ))}
                 </datalist>
               </div>
-              <div className="sm:col-span-2">
+              <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
                   Pre-fill Geographic Area
                 </label>
@@ -163,7 +139,7 @@ export function SignupLinkModal({
           </div>
 
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600 leading-relaxed">
-            When an applicant opens this link, they immediately see only the Cerebus Add Agent onboarding form without needing to sign in. Once submitted, their dossier, documents, and initial cycle confirmation appear immediately in your Admin dashboard.
+            When an applicant opens this link, they immediately see only the Cerebus Add Agent onboarding form without needing to sign in. Once submitted, their dossier, documents, and initial banking confirmation appear immediately in your Admin dashboard.
           </div>
         </div>
       </div>

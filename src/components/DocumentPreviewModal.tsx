@@ -68,14 +68,6 @@ export function DocumentPreviewModal({
             {docData && (
               <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
                 <span>{docData.docCategory.replace('_', ' ')}</span>
-                {docData.cycleMonth && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span className="font-mono tabular-nums">
-                      Cycle {docData.cycleMonth}
-                    </span>
-                  </>
-                )}
                 <span aria-hidden="true">·</span>
                 <span className="font-mono tabular-nums">
                   {formatBytes(docData.fileSize)}

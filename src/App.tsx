@@ -52,7 +52,7 @@ import {
   MonthlyConfirmation,
   UserAccount,
 } from './types';
-import { formatCycleLabel, getCurrentCycleMonth, getCycleOptions } from './utils/cycleUtils';
+import { getCurrentCycleMonth } from './utils/cycleUtils';
 
 type NavView = 'overview' | 'agents' | 'verify' | 'audit' | 'access';
 
@@ -76,10 +76,7 @@ function LedgerDashboard() {
   const [cleanupChecked, setCleanupChecked] = useState(false);
 
   const [activeView, setActiveView] = useState<NavView>('overview');
-  const [activeCycle, setActiveCycle] = useState<string>(() =>
-    getCurrentCycleMonth(),
-  );
-  const cycleOptions = useMemo(() => getCycleOptions(), []);
+  const [activeCycle] = useState<string>(() => getCurrentCycleMonth());
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -489,19 +486,6 @@ function LedgerDashboard() {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <select
-              value={activeCycle}
-              onChange={(e) => setActiveCycle(e.target.value)}
-              aria-label="Select payment cycle"
-              className="px-3 py-2 text-xs font-mono tabular-nums font-medium border border-slate-200 rounded-lg bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-            >
-              {cycleOptions.map((c) => (
-                <option key={c} value={c}>
-                  {formatCycleLabel(c)}
-                </option>
-              ))}
-            </select>
-
             {isStaff && (
               <>
                 <button
@@ -772,7 +756,7 @@ function LedgerDashboard() {
                   • <span className="font-semibold text-slate-900">{agents.length}</span> agent profile{agents.length === 1 ? '' : 's'}
                 </li>
                 <li>
-                  • <span className="font-semibold text-slate-900">{confirmations.length}</span> monthly confirmation{confirmations.length === 1 ? '' : 's'} & uploaded documents
+                  • <span className="font-semibold text-slate-900">{confirmations.length}</span> banking confirmation{confirmations.length === 1 ? '' : 's'} & uploaded documents
                 </li>
                 <li>
                   • <span className="font-semibold text-slate-900">{auditLogs.length}</span> audit trail log entr{auditLogs.length === 1 ? 'y' : 'ies'}

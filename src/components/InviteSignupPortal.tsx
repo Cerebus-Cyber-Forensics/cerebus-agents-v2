@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import {
-  AlertCircle,
   Check,
   CheckCircle2,
   ClipboardCheck,
@@ -9,7 +8,7 @@ import {
   PlusCircle,
 } from 'lucide-react';
 import { GeneratedAgentCredentials } from '../types';
-import { formatCycleLabel, getCurrentCycleMonth } from '../utils/cycleUtils';
+import { getCurrentCycleMonth } from '../utils/cycleUtils';
 import { AgentFormModal } from './AgentFormModal';
 
 interface SubmittedReceipt {
@@ -99,24 +98,11 @@ export function InviteSignupPortal() {
                 </span>
               </div>
               <div>
-                <span className="text-slate-500 block">Payment Cycle</span>
-                <span className="font-mono font-medium text-slate-900">
-                  {formatCycleLabel(submittedReceipt.cycleMonth)}
+                <span className="text-slate-500 block">Banking Status</span>
+                <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
+                  <ClipboardCheck className="w-3.5 h-3.5" />
+                  Banking Confirmed
                 </span>
-              </div>
-              <div>
-                <span className="text-slate-500 block">Submission Status</span>
-                {submittedReceipt.isLateAfterCutoff ? (
-                  <span className="inline-flex items-center gap-1 font-medium text-amber-700">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    Late · Flagged for Admin Review
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
-                    <ClipboardCheck className="w-3.5 h-3.5" />
-                    Confirmed On-Time
-                  </span>
-                )}
               </div>
             </div>
 
@@ -130,7 +116,7 @@ export function InviteSignupPortal() {
                         Your Agent Portal Login Credentials
                       </h2>
                       <p className="text-xs text-slate-300 mt-0.5">
-                        Save these details now to log in later and confirm or update your monthly banking details.
+                        Save these details now to log in later and confirm or update your banking details.
                       </p>
                     </div>
                   </div>

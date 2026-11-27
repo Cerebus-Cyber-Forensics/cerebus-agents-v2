@@ -86,9 +86,6 @@ export function LoginGate() {
               className="h-9 w-auto object-contain"
             />
           </div>
-          <span className="text-xs font-mono tabular-nums text-slate-600 whitespace-nowrap">
-            Monthly Cutoff: 2nd · Payout: 7th
-          </span>
         </div>
       </header>
 
@@ -100,10 +97,10 @@ export function LoginGate() {
                 Cerebus Cyber Forensics · Operations Ledger
               </p>
               <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900">
-                Staff Payment & Compliance Confirmation
+                Agent & Banking Details Confirmation
               </h1>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Centralize agent onboarding records, confirm or update monthly banking details ahead of the 2nd-of-month cutoff, verify payouts for the 7th, and inspect an immutable forensic paper trail.
+                Centralize agent onboarding records, confirm or update banking details, verify payout accounts, and inspect an immutable forensic paper trail.
               </p>
             </div>
 
@@ -111,7 +108,7 @@ export function LoginGate() {
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
                 <p className="text-sm text-slate-700">
-                  <span className="font-medium text-slate-900">Monthly YYYYMM Cycles:</span> Agents confirm existing accounts or upload updated bank statements 5 days before the 7th.
+                  <span className="font-medium text-slate-900">Banking Details Confirmation:</span> Agents confirm existing bank accounts or submit updated banking details directly in the portal.
                 </p>
               </div>
               <div className="flex items-start gap-3">

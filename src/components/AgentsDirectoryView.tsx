@@ -99,8 +99,18 @@ export function AgentsDirectoryView({
         const conf = cycleConfMap.get(agent.agentId);
         const effectiveStatus: VerificationStatus =
           conf?.verificationStatus || 'pending';
-        if (statusFilter !== 'all' && effectiveStatus !== statusFilter)
-          return false;
+        if (statusFilter !== 'all') {
+          if (statusFilter === 'confirmed') {
+            if (
+              effectiveStatus !== 'confirmed' &&
+              effectiveStatus !== 'late_flagged'
+            ) {
+              return false;
+            }
+          } else if (effectiveStatus !== statusFilter) {
+            return false;
+          }
+        }
 
         if (tokens.length === 0) return true;
         const haystack = [
@@ -141,7 +151,6 @@ export function AgentsDirectoryView({
     if (filteredAgents.length === 0) return;
 
     const headers = [
-      'Payment Cycle',
       'Cerebus agent code',
       'Agent Status',
       'Full Name',
@@ -165,10 +174,9 @@ export function AgentsDirectoryView({
       'Account number',
       'ID Document On File',
       'Contract On File',
-      `Cycle ${activeCycle} Bank Doc`,
-      `Cycle ${activeCycle} Status`,
+      'Bank Document',
+      'Banking Status',
       'Confirmation Action',
-      'Late After 2nd',
       'Confirmed / Updated At',
       'Verified By',
       'Verified At',
@@ -178,8 +186,10 @@ export function AgentsDirectoryView({
 
     const rows = filteredAgents.map((a) => {
       const conf = cycleConfMap.get(a.agentId);
+      const rawStatus = conf?.verificationStatus || 'pending';
+      const displayStatus =
+        rawStatus === 'late_flagged' ? 'confirmed' : rawStatus;
       return [
-        activeCycle,
         a.cerebusAgentCode,
         a.status,
         getAgentFullName(a),
@@ -204,9 +214,8 @@ export function AgentsDirectoryView({
         a.idDocName || (a.idDocId ? 'Yes' : 'No'),
         a.contractDocName || (a.contractDocId ? 'Yes' : 'No'),
         conf?.bankDocName || '',
-        conf?.verificationStatus || 'pending',
+        displayStatus,
         conf?.actionKind || '',
-        conf?.isLateAfterCutoff ? 'YES' : 'NO',
         conf ? formatTimestamp(conf.updatedAt || conf.submittedAt) : '',
         conf?.verifiedByName || '',
         conf?.verifiedAt || '',
@@ -217,7 +226,7 @@ export function AgentsDirectoryView({
 
     const filterSuffix = hasActiveFilters ? '_filtered' : '';
     downloadCsv(
-      `cerebus_agents_records_${activeCycle}${filterSuffix}.csv`,
+      `cerebus_agents_records${filterSuffix}.csv`,
       headers,
       rows,
     );
@@ -288,13 +297,12 @@ export function AgentsDirectoryView({
             onChange={(e) =>
               setStatusFilter(e.target.value as 'all' | VerificationStatus)
             }
-            aria-label="Filter by cycle status"
+            aria-label="Filter by banking status"
             className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
           >
-            <option value="all">All {activeCycle} States</option>
+            <option value="all">All Banking States</option>
             <option value="pending">Pending Confirmation</option>
-            <option value="confirmed">Confirmed On-Time</option>
-            <option value="late_flagged">Late · Flagged</option>
+            <option value="confirmed">Confirmed</option>
             <option value="verified">Verified</option>
             <option value="rejected">Correction Needed</option>
           </select>
@@ -424,7 +432,7 @@ export function AgentsDirectoryView({
                     Compliance Docs
                   </th>
                   <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
-                    {activeCycle} Status
+                    Banking Status
                   </th>
                   <th className="px-4 py-3 text-right font-medium whitespace-nowrap">
                     Actions
@@ -546,7 +554,7 @@ export function AgentsDirectoryView({
                             hasBankProof ? 'text-emerald-700' : 'text-amber-700'
                           }
                         >
-                          {activeCycle} {hasBankProof ? '✓' : '—'}
+                          Bank Proof {hasBankProof ? '✓' : '—'}
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">

@@ -53,7 +53,6 @@ import {
   buildFieldDiffs,
   getAgentFullName,
   getCutoffDateString,
-  getCutoffStatus,
 } from '../utils/cycleUtils';
 
 function sanitizeStr(val: string | undefined, max: number): string {
@@ -509,7 +508,6 @@ export async function createAgentWithDocsAndLog(
   );
   const fullName = getAgentFullName(input);
   const cycleMonth = input.cycleMonth;
-  const cutoff = getCutoffStatus(cycleMonth);
 
   const dupCheck = await checkDuplicateBankDetails(
     input.bankNameAndCode,
@@ -732,11 +730,8 @@ export async function createAgentWithDocsAndLog(
     });
   }
 
-  // Create initial monthly confirmation record for the selected cycle
   const confirmationId = `${agentId}_${cycleMonth}`;
-  const verificationStatus: VerificationStatus = cutoff.isAfterCutoff
-    ? 'late_flagged'
-    : 'confirmed';
+  const verificationStatus: VerificationStatus = 'confirmed';
 
   const confirmationPayload = {
     confirmationId,
@@ -749,7 +744,7 @@ export async function createAgentWithDocsAndLog(
     geographicArea: agentPayload.geographicArea,
     cycleMonth,
     cutoffDate: getCutoffDateString(cycleMonth),
-    isLateAfterCutoff: cutoff.isAfterCutoff,
+    isLateAfterCutoff: false,
     actionKind: 'confirmed_existing' as ActionKind,
     bankNameAndCode: agentPayload.bankNameAndCode,
     accountHolderName: agentPayload.accountHolderName,
@@ -874,11 +869,11 @@ export async function createAgentWithDocsAndLog(
     cerebusTeamLeader: agentPayload.cerebusTeamLeader,
     actionType: 'agent_created' as AuditActionType,
     cycleMonth,
-    isLateAfterCutoff: cutoff.isAfterCutoff,
+    isLateAfterCutoff: false,
     summary: sanitizeStr(
       options?.publicSignup
-        ? `${fullName} submitted onboarding registration for ${agentPayload.cerebusAgentCode} via public signup link (cycle ${cycleMonth}).`
-        : `${actor.displayName} onboarded agent ${agentPayload.cerebusAgentCode} (${fullName}) for cycle ${cycleMonth}.`,
+        ? `${fullName} submitted onboarding registration for ${agentPayload.cerebusAgentCode} via public signup link.`
+        : `${actor.displayName} onboarded agent ${agentPayload.cerebusAgentCode} (${fullName}).`,
       FIELD_LIMITS.summary,
     ),
     changes: changes.slice(0, 30),
@@ -1260,7 +1255,7 @@ export async function validateConfirmationWritePermission(
       allowed: false,
       path,
       liveConfirmation,
-      reason: `Cycle ${cycleMonth} is already verified for payout and cannot be modified by an agent.`,
+      reason: 'Banking details are already verified and cannot be modified by an agent.',
     };
   }
 
@@ -1277,7 +1272,6 @@ export async function submitMonthlyBankConfirmation(
 ): Promise<void> {
   const { agent, cycleMonth, actionKind, existingConfirmation } = payload;
   const confirmationId = `${agent.agentId}_${cycleMonth}`;
-  const cutoff = getCutoffStatus(cycleMonth);
   const confirmationRef = doc(db, 'monthly_confirmations', confirmationId);
 
   const permCheck = await validateConfirmationWritePermission(
@@ -1373,15 +1367,13 @@ export async function submitMonthlyBankConfirmation(
       uploadedAt: serverTimestamp(),
     });
     bankDiffs.push({
-      field: `Upload bank for ${cycleMonth}`,
+      field: 'Upload bank proof',
       previousValue: resolvedExisting?.bankDocName || '(none)',
       newValue: bankDocName,
     });
   }
 
-  const verificationStatus: VerificationStatus = cutoff.isAfterCutoff
-    ? 'late_flagged'
-    : 'confirmed';
+  const verificationStatus: VerificationStatus = 'confirmed';
 
   const previousBankSummary =
     bankDiffs.some((d) => !d.field.startsWith('Upload bank'))
@@ -1395,7 +1387,7 @@ export async function submitMonthlyBankConfirmation(
     batch.update(confirmationRef, {
       ownerUid: resolvedOwnerUid,
       actionKind: actualActionKind,
-      isLateAfterCutoff: cutoff.isAfterCutoff,
+      isLateAfterCutoff: false,
       ...nextBank,
       previousBankSummary,
       bankDocId,
@@ -1417,7 +1409,7 @@ export async function submitMonthlyBankConfirmation(
       geographicArea: agent.geographicArea,
       cycleMonth,
       cutoffDate: getCutoffDateString(cycleMonth),
-      isLateAfterCutoff: cutoff.isAfterCutoff,
+      isLateAfterCutoff: false,
       actionKind: actualActionKind,
       ...nextBank,
       previousBankSummary,
@@ -1492,7 +1484,7 @@ export async function submitMonthlyBankConfirmation(
       ? bankDiffs
       : [
           {
-            field: `Cycle ${cycleMonth} Attestation`,
+            field: 'Banking Attestation',
             previousValue: resolvedExisting?.verificationStatus || 'pending',
             newValue: `Confirmed existing (${nextBank.bankNameAndCode} · ${nextBank.accountNumber})`,
           },
@@ -1516,11 +1508,11 @@ export async function submitMonthlyBankConfirmation(
       ? 'banking_updated'
       : 'monthly_confirmed') as AuditActionType,
     cycleMonth,
-    isLateAfterCutoff: cutoff.isAfterCutoff,
+    isLateAfterCutoff: false,
     summary: sanitizeStr(
       actualActionKind === 'updated_banking'
-        ? `${actorDisplayName} updated banking details for ${agent.cerebusAgentCode} (${cycleMonth}${cutoff.isAfterCutoff ? ' · Late after 2nd' : ''}).`
-        : `${actorDisplayName} confirmed existing banking details for ${agent.cerebusAgentCode} (${cycleMonth}${cutoff.isAfterCutoff ? ' · Late after 2nd' : ''}).`,
+        ? `${actorDisplayName} updated banking details for ${agent.cerebusAgentCode}.`
+        : `${actorDisplayName} confirmed existing banking details for ${agent.cerebusAgentCode}.`,
       FIELD_LIMITS.summary,
     ),
     changes: auditChanges.slice(0, 30),
@@ -1574,11 +1566,11 @@ export async function verifyOrRejectMonthlyPayment(
       ? 'payment_verified'
       : 'payment_rejected') as AuditActionType,
     cycleMonth: confirmation.cycleMonth,
-    isLateAfterCutoff: confirmation.isLateAfterCutoff,
+    isLateAfterCutoff: false,
     summary: sanitizeStr(
       decision === 'verified'
-        ? `${actor.displayName} verified ${confirmation.agentCode} for ${confirmation.cycleMonth} payout.`
-        : `${actor.displayName} flagged ${confirmation.agentCode} (${confirmation.cycleMonth}) for correction: ${notes || 'Details require update'}.`,
+        ? `${actor.displayName} verified banking details for ${confirmation.agentCode}.`
+        : `${actor.displayName} flagged ${confirmation.agentCode} for banking correction: ${notes || 'Details require update'}.`,
       FIELD_LIMITS.summary,
     ),
     changes: [

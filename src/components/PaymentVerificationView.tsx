@@ -13,7 +13,7 @@ import {
   MonthlyConfirmation,
   UserAccount,
 } from '../types';
-import { formatCycleLabel, formatTimestamp } from '../utils/cycleUtils';
+import { formatTimestamp } from '../utils/cycleUtils';
 import { downloadCsv } from '../utils/csvUtils';
 import { VerificationStatusLabel } from './StatusLabel';
 
@@ -27,13 +27,7 @@ interface PaymentVerificationViewProps {
   onToast: (message: string) => void;
 }
 
-type QueueFilter =
-  | 'needs_review'
-  | 'late_flagged'
-  | 'confirmed'
-  | 'verified'
-  | 'rejected'
-  | 'all';
+type QueueFilter = 'needs_review' | 'verified' | 'rejected' | 'all';
 
 export function PaymentVerificationView({
   agents,
@@ -64,9 +58,6 @@ export function PaymentVerificationView({
           c.verificationStatus === 'confirmed' ||
           c.verificationStatus === 'late_flagged'
         );
-      }
-      if (filter === 'late_flagged') {
-        return c.verificationStatus === 'late_flagged' || c.isLateAfterCutoff;
       }
       if (filter === 'all') return true;
       return c.verificationStatus === filter;
@@ -111,7 +102,6 @@ export function PaymentVerificationView({
     if (filtered.length === 0) return;
 
     const headers = [
-      'Cycle',
       'Agent Code',
       'Agent Name',
       'Team Leader',
@@ -124,8 +114,6 @@ export function PaymentVerificationView({
       'Account Number',
       'Confirmation Action',
       'Verification Status',
-      'Late After 2nd',
-      'Cutoff Date',
       'Submitted By',
       'Submitted At',
       'Bank Proof File',
@@ -137,8 +125,11 @@ export function PaymentVerificationView({
 
     const rows = filtered.map((c) => {
       const matchedAgent = agents.find((a) => a.agentId === c.agentId);
+      const displayStatus =
+        c.verificationStatus === 'late_flagged'
+          ? 'confirmed'
+          : c.verificationStatus;
       return [
-        c.cycleMonth,
         c.agentCode,
         c.agentName,
         c.cerebusTeamLeader,
@@ -150,9 +141,7 @@ export function PaymentVerificationView({
         c.accountType,
         c.accountNumber,
         c.actionKind,
-        c.verificationStatus,
-        c.isLateAfterCutoff ? 'YES' : 'NO',
-        c.cutoffDate,
+        displayStatus,
         c.submittedByName,
         formatTimestamp(c.updatedAt || c.submittedAt),
         c.bankDocName || '',
@@ -163,19 +152,14 @@ export function PaymentVerificationView({
       ];
     });
 
-    downloadCsv(
-      `cerebus_payroll_verification_${activeCycle}_${filter}.csv`,
-      headers,
-      rows,
-    );
+    downloadCsv(`cerebus_banking_verification_${filter}.csv`, headers, rows);
     onToast(
-      `Exported ${filtered.length} ${filter.replace('_', ' ')} record(s) for ${activeCycle} to CSV.`,
+      `Exported ${filtered.length} ${filter.replace('_', ' ')} banking record(s) to CSV.`,
     );
   };
 
   const handleExportVerifiedBatch = () => {
     const headers = [
-      'Cycle',
       'Agent Code',
       'Agent Name',
       'Team Leader',
@@ -184,13 +168,11 @@ export function PaymentVerificationView({
       'Account Holder Name',
       'Account Type',
       'Account Number',
-      'Late After 2nd',
       'Verified By',
       'Verified At',
     ];
 
     const rows = verifiedList.map((c) => [
-      c.cycleMonth,
       c.agentCode,
       c.agentName,
       c.cerebusTeamLeader,
@@ -199,12 +181,11 @@ export function PaymentVerificationView({
       c.accountHolderName,
       c.accountType,
       c.accountNumber,
-      c.isLateAfterCutoff ? 'YES' : 'NO',
       c.verifiedByName || '',
       c.verifiedAt || '',
     ]);
 
-    downloadCsv(`cerebus_verified_payouts_${activeCycle}.csv`, headers, rows);
+    downloadCsv('cerebus_verified_banking.csv', headers, rows);
   };
 
   const counts = {
@@ -213,11 +194,6 @@ export function PaymentVerificationView({
         c.verificationStatus === 'confirmed' ||
         c.verificationStatus === 'late_flagged',
     ).length,
-    late_flagged: cycleConfs.filter(
-      (c) => c.verificationStatus === 'late_flagged' || c.isLateAfterCutoff,
-    ).length,
-    confirmed: cycleConfs.filter((c) => c.verificationStatus === 'confirmed')
-      .length,
     verified: verifiedList.length,
     rejected: cycleConfs.filter((c) => c.verificationStatus === 'rejected')
       .length,
@@ -231,8 +207,6 @@ export function PaymentVerificationView({
           {(
             [
               ['needs_review', `Needs Review (${counts.needs_review})`],
-              ['late_flagged', `Late · Flagged (${counts.late_flagged})`],
-              ['confirmed', `On-Time (${counts.confirmed})`],
               ['verified', `Verified (${counts.verified})`],
               ['rejected', `Corrections (${counts.rejected})`],
               ['all', `All (${counts.all})`],
@@ -286,10 +260,10 @@ export function PaymentVerificationView({
       {filtered.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-10 text-center space-y-2">
           <p className="text-sm font-medium text-slate-900">
-            No confirmations in this queue for {formatCycleLabel(activeCycle)}
+            No banking confirmations in this queue
           </p>
           <p className="text-xs text-slate-500">
-            Switch filter tabs above or wait for agents to submit their monthly banking confirmations.
+            Switch filter tabs above or wait for agents to confirm their banking details.
           </p>
         </div>
       ) : (
@@ -351,15 +325,6 @@ export function PaymentVerificationView({
                       <span className="font-mono tabular-nums">
                         Submitted {formatTimestamp(conf.updatedAt || conf.submittedAt)}
                       </span>
-                      {conf.isLateAfterCutoff && (
-                        <>
-                          <span aria-hidden="true">·</span>
-                          <span className="inline-flex items-center gap-1 text-amber-700 font-medium">
-                            <AlertCircle className="w-3.5 h-3.5" />
-                            Submitted after {conf.cutoffDate} cutoff
-                          </span>
-                        </>
-                      )}
                     </div>
                   </div>
 
@@ -390,7 +355,7 @@ export function PaymentVerificationView({
                   <div className="md:col-span-4 space-y-1 flex flex-col justify-between">
                     <div>
                       <p className="text-xs text-slate-500">
-                        Cycle {conf.cycleMonth} Bank Proof
+                        Bank Proof Document
                       </p>
                       <p className="text-xs text-slate-700 truncate">
                         {conf.bankDocName ||
@@ -405,7 +370,7 @@ export function PaymentVerificationView({
                         onClick={() =>
                           onPreviewDoc(
                             conf.bankDocId!,
-                            `${conf.agentCode} Bank Proof (${conf.cycleMonth})`,
+                            `${conf.agentCode} Bank Proof`,
                           )
                         }
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:underline cursor-pointer self-start mt-1"

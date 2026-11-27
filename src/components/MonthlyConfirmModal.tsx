@@ -23,11 +23,7 @@ import {
   ProcessedUploadFile,
   UserAccount,
 } from '../types';
-import {
-  formatCycleLabel,
-  getAgentFullName,
-  getCutoffStatus,
-} from '../utils/cycleUtils';
+import { getAgentFullName } from '../utils/cycleUtils';
 import { processUploadFile } from '../utils/fileUtils';
 
 interface MonthlyConfirmModalProps {
@@ -47,7 +43,6 @@ export function MonthlyConfirmModal({
   onClose,
   onSuccess,
 }: MonthlyConfirmModalProps) {
-  const cutoff = getCutoffStatus(cycleMonth);
   const fullName = getAgentFullName(agent);
 
   const [mode, setMode] = useState<ActionKind>('confirmed_existing');
@@ -201,7 +196,7 @@ export function MonthlyConfirmModal({
       (!existingConfirmation?.bankDocId || bankingDetailsChanged)
     ) {
       setError(
-        `Please upload a bank statement or bank confirmation letter for ${cycleMonth} (required when updating banking details).`,
+        `Please upload a bank statement or bank confirmation letter (required when updating banking details).`,
       );
       return;
     }
@@ -259,16 +254,14 @@ export function MonthlyConfirmModal({
         actor,
       );
       onSuccess(
-        cutoff.isAfterCutoff
-          ? `Banking confirmation saved for ${agent.cerebusAgentCode} (${cycleMonth}) and flagged as post-cutoff for Admin review.`
-          : `Banking confirmation saved on time for ${agent.cerebusAgentCode} (${cycleMonth}).`,
+        `Banking confirmation saved for ${agent.cerebusAgentCode}.`,
       );
       onClose();
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : 'Unable to submit monthly banking confirmation.',
+          : 'Unable to submit banking confirmation.',
       );
     } finally {
       setSubmitting(false);
@@ -281,14 +274,13 @@ export function MonthlyConfirmModal({
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">
-              Monthly Banking Confirmation · {formatCycleLabel(cycleMonth)}
+              Confirm Banking Details
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               <span className="font-mono tabular-nums">
                 {agent.cerebusAgentCode}
               </span>{' '}
-              · {fullName} · Cutoff {cutoff.cutoffDateStr} (5 days before{' '}
-              {cutoff.payoutDateStr})
+              · {fullName}
             </p>
           </div>
           <button
@@ -302,32 +294,6 @@ export function MonthlyConfirmModal({
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
-          {cutoff.isAfterCutoff ? (
-            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
-              <AlertTriangle className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
-              <div className="text-xs text-amber-900 space-y-0.5">
-                <p className="font-semibold">
-                  Late Submission Window (Past {cutoff.cutoffDateStr} Cutoff)
-                </p>
-                <p>
-                  This update is permitted, and will automatically be flagged as{' '}
-                  <span className="font-medium">Late · Flagged for Review</span>{' '}
-                  in the Admin verification queue.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
-              <CheckCircle2 className="w-4 h-4 text-emerald-700 mt-0.5 shrink-0" />
-              <div className="text-xs text-emerald-900 space-y-0.5">
-                <p className="font-semibold">
-                  On-Time Window ({cutoff.statusHeadline})
-                </p>
-                <p>{cutoff.statusDetail}</p>
-              </div>
-            </div>
-          )}
-
           <div className="space-y-2">
             <label className="block text-xs font-medium text-slate-700">
               Confirmation Action
@@ -354,7 +320,7 @@ export function MonthlyConfirmModal({
                   Confirm Existing Banking
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Attest no banking changes for {cycleMonth} — no bank statement upload needed.
+                  Attest no banking changes — no bank statement upload needed.
                 </p>
               </button>
 
@@ -371,7 +337,7 @@ export function MonthlyConfirmModal({
                   Change / Update Banking
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Submit new account details and upload updated bank proof for {cycleMonth}.
+                  Submit new account details and upload updated bank proof.
                 </p>
               </button>
             </div>
@@ -484,8 +450,7 @@ export function MonthlyConfirmModal({
           {mode === 'updated_banking' && (
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-700">
-                Upload bank statement for {cycleMonth}{' '}
-                <span className="text-red-600">*</span>
+                Upload bank statement <span className="text-red-600">*</span>
               </label>
               <label className="flex items-center justify-between gap-3 px-4 py-3 border border-dashed border-slate-300 rounded-lg bg-slate-50 hover:bg-slate-100/70 transition-colors cursor-pointer">
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -547,8 +512,8 @@ export function MonthlyConfirmModal({
                 {checkingAuth
                   ? 'Verifying Access...'
                   : mode === 'updated_banking'
-                    ? `Submit Updated Banking (${cycleMonth})`
-                    : `Confirm Banking (${cycleMonth})`}
+                    ? 'Submit Updated Banking'
+                    : 'Confirm Banking Details'}
               </span>
             </button>
           </div>

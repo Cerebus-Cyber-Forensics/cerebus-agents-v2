@@ -13,9 +13,9 @@ const ACTION_LABELS: Record<AuditActionType, string> = {
   agent_created: 'Agent Onboarded',
   personal_info_updated: 'Personal Info Updated',
   banking_updated: 'Banking Changed',
-  monthly_confirmed: 'Monthly Confirmed',
+  monthly_confirmed: 'Banking Confirmed',
   document_uploaded: 'Document Uploaded',
-  payment_verified: 'Payment Verified',
+  payment_verified: 'Banking Verified',
   payment_rejected: 'Correction Requested',
   role_updated: 'Access Role Updated',
 };
@@ -27,7 +27,6 @@ export function AuditTrailView({
 }: AuditTrailViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [actionFilter, setActionFilter] = useState<'all' | AuditActionType>('all');
-  const [lateOnly, setLateOnly] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
 
   const filteredLogs = useMemo(() => {
@@ -37,7 +36,6 @@ export function AuditTrailView({
       .filter((log) => {
         if (actionFilter !== 'all' && log.actionType !== actionFilter)
           return false;
-        if (lateOnly && !log.isLateAfterCutoff) return false;
         if (!q) return true;
         const haystack = [
           log.actorName,
@@ -52,7 +50,7 @@ export function AuditTrailView({
           .toLowerCase();
         return haystack.includes(q);
       });
-  }, [auditLogs, searchTerm, actionFilter, lateOnly]);
+  }, [auditLogs, searchTerm, actionFilter]);
 
   const toggleExpand = (id: string) => {
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -88,16 +86,6 @@ export function AuditTrailView({
               </option>
             ))}
           </select>
-
-          <label className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 border border-slate-200 rounded-lg bg-white cursor-pointer">
-            <input
-              type="checkbox"
-              checked={lateOnly}
-              onChange={(e) => setLateOnly(e.target.checked)}
-              className="rounded border-slate-300 text-blue-700 focus:ring-blue-600"
-            />
-            <span>Post-Cutoff Late Only</span>
-          </label>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
@@ -154,22 +142,6 @@ export function AuditTrailView({
                             {log.agentCode}
                           </span>
                           <span>({log.agentName})</span>
-                          {log.cycleMonth && (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span className="font-mono tabular-nums">
-                                Cycle {log.cycleMonth}
-                              </span>
-                            </>
-                          )}
-                          {log.isLateAfterCutoff && (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span className="text-amber-700 font-medium">
-                                Late after 2nd cutoff
-                              </span>
-                            </>
-                          )}
                         </div>
                         <p className="text-sm text-slate-800">{log.summary}</p>
                         <p className="text-xs text-slate-500">

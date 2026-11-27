@@ -89,8 +89,7 @@ export function ContractTermsModal({
                 Cerebus Cyber Forensics · Agent Code{' '}
                 <span className="font-mono font-medium text-slate-700">
                   {agentCode || 'NEW'}
-                </span>{' '}
-                · Cycle {cycleMonth}
+                </span>
               </p>
             </div>
           </div>
@@ -160,13 +159,13 @@ export function ContractTermsModal({
 
           <section className="space-y-1.5">
             <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900">
-              2. Monthly Payment Cycle & 2nd-of-Month Cutoff Rule
+              2. Banking Details Confirmation & Verification
             </h3>
             <p>
-              Staff and agent payouts are processed on the <strong>7th</strong> of each month for the active <span className="font-mono">{cycleMonth}</span> payment cycle. To ensure uninterrupted disbursement, you must confirm your existing banking details or submit updated banking details and bank confirmation proof at least <strong>5 days before the 7th</strong> (on or before the <strong>2nd</strong> of each month).
+              To ensure accurate disbursements, you must confirm your existing banking details or submit updated banking details and bank confirmation proof in the portal whenever your payout account changes.
             </p>
             <p>
-              Submissions or banking modifications entered after the 2nd remain permitted in the system, are automatically flagged as <strong>Late · Flagged for Review</strong>, and require explicit Admin verification prior to payout release.
+              All submitted banking updates undergo Admin verification prior to payout processing.
             </p>
           </section>
 
@@ -184,7 +183,7 @@ export function ContractTermsModal({
               4. Compliance Documentation & Verification
             </h3>
             <p>
-              You warrant that all uploaded identification documents (ID/Passport), signed contract copies, and monthly bank statements are genuine, legible, and current. Any material alteration or submission of falsified documentation will result in immediate suspension of payout verification and termination of your Cerebus agent code ({agentCode}).
+              You warrant that all uploaded identification documents (ID/Passport), signed contract copies, and bank confirmation statements are genuine, legible, and current. Any material alteration or submission of falsified documentation will result in immediate suspension of banking verification and termination of your Cerebus agent code ({agentCode}).
             </p>
           </section>
 

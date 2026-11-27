@@ -28,10 +28,8 @@ import {
   UserAccount,
 } from '../types';
 import {
-  formatCycleLabel,
   formatTimestamp,
   getAgentFullName,
-  getCutoffStatus,
   maskAccountNumber,
   toMillis,
 } from '../utils/cycleUtils';
@@ -151,7 +149,6 @@ export function AgentSelfServiceView({
     );
   }
 
-  const cutoff = getCutoffStatus(activeCycle);
   const fullName = getAgentFullName(agent);
   const agentConfirmations = confirmations
     .filter((c) => c.agentId === agent.agentId)
@@ -196,12 +193,6 @@ export function AgentSelfServiceView({
           )}
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs text-slate-600 flex-wrap">
-              <span className="font-mono tabular-nums font-semibold text-slate-900">
-                {formatCycleLabel(activeCycle)}
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>Payout {cutoff.payoutDateStr}</span>
-              <span aria-hidden="true">·</span>
               <VerificationStatusLabel
                 status={activeConf?.verificationStatus || 'pending'}
                 isLateAfterCutoff={activeConf?.isLateAfterCutoff}
@@ -209,21 +200,21 @@ export function AgentSelfServiceView({
             </div>
             <h2 className="text-base font-semibold text-slate-900">
               {isVerified
-                ? `Your ${activeCycle} banking details are confirmed and verified for the ${cutoff.payoutDateStr} payout.`
+                ? 'Your banking details are confirmed and verified.'
                 : isConfirmed
-                  ? `Banking Details Confirmed for ${formatCycleLabel(activeCycle)}`
+                  ? 'Banking Details Confirmed'
                   : isRejected
-                    ? `Banking Confirmation Needs Correction (${formatCycleLabel(activeCycle)})`
-                    : `Confirm Banking Details · ${formatCycleLabel(activeCycle)}`}
+                    ? 'Banking Confirmation Needs Correction'
+                    : 'Confirm Your Banking Details'}
             </h2>
             <p className="text-xs text-slate-600">
               {isVerified
-                ? `Verified for payout${activeConf?.verifiedByName ? ` by ${activeConf.verifiedByName}` : ''}. No further action is required for ${activeCycle}.`
+                ? `Verified${activeConf?.verifiedByName ? ` by ${activeConf.verifiedByName}` : ''}. No further action is required unless your bank account changes.`
                 : isConfirmed
-                  ? `Confirmed ${confirmedAtLabel !== '—' ? `on ${confirmedAtLabel}` : 'on record'} (${activeConf?.actionKind === 'updated_banking' ? 'updated bank details submitted' : 'existing bank details attested'})${activeConf?.isLateAfterCutoff ? ' · Submitted after the 2nd cutoff and queued for Admin review.' : ' · Queued for Admin payout verification.'}`
+                  ? `Confirmed ${confirmedAtLabel !== '—' ? `on ${confirmedAtLabel}` : 'on record'} (${activeConf?.actionKind === 'updated_banking' ? 'updated bank details submitted' : 'existing bank details attested'}) · Queued for Admin verification.`
                   : isRejected
                     ? 'Please review the reviewer note below and resubmit your banking details.'
-                    : `Please confirm your payout banking details ahead of the ${cutoff.payoutDateStr} payout run.`}
+                    : 'Please confirm that your registered banking details are accurate or submit updated bank details.'}
             </p>
             {activeConf?.reviewerNotes && (
               <p className="text-xs font-medium text-red-700 pt-0.5">
@@ -267,7 +258,7 @@ export function AgentSelfServiceView({
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Confirmed · Edit {activeCycle} Banking</span>
+              <span>Confirmed · Edit Banking</span>
             </button>
           ) : (
             <button
@@ -278,8 +269,8 @@ export function AgentSelfServiceView({
               <CreditCard className="w-3.5 h-3.5" />
               <span>
                 {isRejected
-                  ? `Update & Confirm ${activeCycle} Banking`
-                  : `Confirm / Update ${activeCycle} Banking`}
+                  ? 'Update & Confirm Banking'
+                  : 'Confirm / Update Banking'}
               </span>
             </button>
           )}
@@ -390,7 +381,7 @@ export function AgentSelfServiceView({
                 {(isConfirmed || isVerified) && (
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 whitespace-nowrap">
                     <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                    <span>{activeCycle} Confirmed</span>
+                    <span>Confirmed</span>
                   </span>
                 )}
               </div>
@@ -418,10 +409,10 @@ export function AgentSelfServiceView({
                 <ShieldCheck className="w-4 h-4 text-emerald-700 mt-0.5 shrink-0" />
                 <div>
                   <p className="font-semibold">
-                    Banking Details Confirmed & Verified ({activeCycle})
+                    Banking Details Confirmed & Verified
                   </p>
                   <p className="text-emerald-800 mt-0.5">
-                    Cleared for {cutoff.payoutDateStr} payout
+                    Verified on file
                     {confirmedAtLabel && confirmedAtLabel !== '—'
                       ? ` · Confirmed ${confirmedAtLabel}`
                       : ''}
@@ -434,7 +425,7 @@ export function AgentSelfServiceView({
                 <CheckCircle2 className="w-4 h-4 text-emerald-700 mt-0.5 shrink-0" />
                 <div>
                   <p className="font-semibold">
-                    Banking Details Confirmed for {formatCycleLabel(activeCycle)}
+                    Banking Details Confirmed
                   </p>
                   <p className="text-emerald-800 mt-0.5">
                     {activeConf?.actionKind === 'updated_banking'
@@ -442,9 +433,6 @@ export function AgentSelfServiceView({
                       : 'Existing banking details confirmed'}
                     {confirmedAtLabel && confirmedAtLabel !== '—'
                       ? ` · ${confirmedAtLabel}`
-                      : ''}
-                    {activeConf?.isLateAfterCutoff
-                      ? ' · Late after cutoff (awaiting Admin review)'
                       : ''}
                   </p>
                 </div>
@@ -454,7 +442,7 @@ export function AgentSelfServiceView({
                 <AlertCircle className="w-4 h-4 text-red-700 mt-0.5 shrink-0" />
                 <div>
                   <p className="font-semibold">
-                    Correction Required ({activeCycle})
+                    Correction Required
                   </p>
                   <p className="text-red-800 mt-0.5">
                     {activeConf?.reviewerNotes ||
@@ -467,10 +455,10 @@ export function AgentSelfServiceView({
                 <CalendarClock className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
                 <div>
                   <p className="font-semibold">
-                    Pending Confirmation for {formatCycleLabel(activeCycle)}
+                    Pending Banking Confirmation
                   </p>
                   <p className="text-amber-800 mt-0.5">
-                    Click Confirm / Update {activeCycle} Banking above to lock in your payout account.
+                    Click Confirm / Update Banking above to confirm your bank account.
                   </p>
                 </div>
               </div>
@@ -567,15 +555,12 @@ export function AgentSelfServiceView({
               {activeConf?.bankDocId && (
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-slate-700 truncate">
-                    Bank ({activeCycle}): {activeConf.bankDocName}
+                    Bank Proof: {activeConf.bankDocName}
                   </span>
                   <button
                     type="button"
                     onClick={() =>
-                      onPreviewDoc(
-                        activeConf.bankDocId!,
-                        `Bank Proof ${activeCycle}`,
-                      )
+                      onPreviewDoc(activeConf.bankDocId!, 'Bank Proof')
                     }
                     className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:underline cursor-pointer shrink-0"
                   >

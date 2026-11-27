@@ -9,11 +9,7 @@ import {
   AuditLogEntry,
   MonthlyConfirmation,
 } from '../types';
-import {
-  formatTimestamp,
-  getPayoutDateString,
-  toMillis,
-} from '../utils/cycleUtils';
+import { formatTimestamp, toMillis } from '../utils/cycleUtils';
 
 interface OverviewViewProps {
   agents: AgentRecord[];
@@ -34,7 +30,6 @@ export function OverviewView({
   onNavigate,
   onSelectAgent,
 }: OverviewViewProps) {
-  const payoutDateStr = getPayoutDateString(activeCycle);
   const cycleConfs = confirmations.filter((c) => c.cycleMonth === activeCycle);
   const confByAgent = new Map(cycleConfs.map((c) => [c.agentId, c]));
 
@@ -42,13 +37,13 @@ export function OverviewView({
   const verifiedCount = cycleConfs.filter(
     (c) => c.verificationStatus === 'verified',
   ).length;
-  const confirmedOnTimeCount = cycleConfs.filter(
-    (c) => c.verificationStatus === 'confirmed',
-  ).length;
-  const lateFlaggedCount = cycleConfs.filter(
+  const confirmedCount = cycleConfs.filter(
     (c) =>
-      c.verificationStatus === 'late_flagged' ||
-      (c.isLateAfterCutoff && c.verificationStatus !== 'verified'),
+      c.verificationStatus === 'confirmed' ||
+      c.verificationStatus === 'late_flagged',
+  ).length;
+  const rejectedCount = cycleConfs.filter(
+    (c) => c.verificationStatus === 'rejected',
   ).length;
   const pendingOrRejectedCount = agents.filter((a) => {
     const c = confByAgent.get(a.agentId);
@@ -110,24 +105,24 @@ export function OverviewView({
 
         <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-2">
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>Verified for Payout</span>
+            <span>Verified Banking</span>
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
           </div>
           <p className="text-2xl font-bold font-mono tabular-nums text-emerald-700">
             {verifiedCount}
           </p>
           <p className="text-xs text-slate-500">
-            Cleared for {payoutDateStr} run
+            Banking details verified by Admin
           </p>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-2">
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>Confirmed On-Time</span>
+            <span>Banking Confirmed</span>
             <CheckCircle2 className="w-4 h-4 text-blue-700" />
           </div>
           <p className="text-2xl font-bold font-mono tabular-nums text-blue-700">
-            {confirmedOnTimeCount}
+            {confirmedCount}
           </p>
           <p className="text-xs text-slate-500">
             Ready for Team Leader / Admin sign-off
@@ -136,14 +131,14 @@ export function OverviewView({
 
         <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-2">
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>Late · Flagged for Review</span>
+            <span>Corrections Needed</span>
             <AlertCircle className="w-4 h-4 text-amber-600" />
           </div>
           <p className="text-2xl font-bold font-mono tabular-nums text-amber-700">
-            {lateFlaggedCount}
+            {rejectedCount}
           </p>
           <p className="text-xs text-slate-500">
-            Submitted after 2nd cutoff
+            Returned for banking correction
           </p>
         </div>
       </div>
@@ -153,7 +148,7 @@ export function OverviewView({
         <div className="lg:col-span-6 bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-900">
-              Team Leader Breakdown ({activeCycle})
+              Team Leader Breakdown
             </h3>
             <button
               type="button"
@@ -249,14 +244,6 @@ export function OverviewView({
                         <span className="font-mono tabular-nums">
                           {formatTimestamp(log.timestamp)}
                         </span>
-                        {log.isLateAfterCutoff && (
-                          <>
-                            <span aria-hidden="true">·</span>
-                            <span className="text-amber-700 font-medium">
-                              Late
-                            </span>
-                          </>
-                        )}
                       </div>
                     </div>
                     {matchedAgent && (

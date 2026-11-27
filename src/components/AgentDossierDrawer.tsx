@@ -15,7 +15,6 @@ import {
   MonthlyConfirmation,
 } from '../types';
 import {
-  formatCycleLabel,
   formatTimestamp,
   getAgentFullName,
   maskAccountNumber,
@@ -204,7 +203,7 @@ export function AgentDossierDrawer({
               }
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#0812B8] hover:bg-[#060E94] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
             >
-              Confirm {activeCycle}
+              Confirm Banking
             </button>
           </div>
         </div>
@@ -359,11 +358,11 @@ export function AgentDossierDrawer({
 
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold text-slate-900">
-                  Monthly Cycle Confirmations
+                  Banking Confirmations
                 </h3>
                 {agentConfirmations.length === 0 ? (
                   <p className="text-sm text-slate-500">
-                    No monthly confirmations recorded yet.
+                    No banking confirmations recorded yet.
                   </p>
                 ) : (
                   <div className="border border-slate-200 rounded-xl divide-y divide-slate-200">
@@ -374,14 +373,14 @@ export function AgentDossierDrawer({
                       >
                         <div className="space-y-1 min-w-0">
                           <div className="flex items-center gap-2 text-xs text-slate-500">
-                            <span className="font-mono tabular-nums font-semibold text-slate-900">
-                              {formatCycleLabel(conf.cycleMonth)}
-                            </span>
-                            <span aria-hidden="true">·</span>
-                            <span>
+                            <span className="font-semibold text-slate-900">
                               {conf.actionKind === 'updated_banking'
                                 ? 'Banking Updated'
                                 : 'Confirmed Existing'}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-mono tabular-nums">
+                              {formatTimestamp(conf.updatedAt || conf.submittedAt)}
                             </span>
                           </div>
                           <p className="text-sm text-slate-800">
@@ -413,14 +412,11 @@ export function AgentDossierDrawer({
                               <button
                                 type="button"
                                 onClick={() =>
-                                  onPreviewDoc(
-                                    conf.bankDocId!,
-                                    `Bank Proof ${conf.cycleMonth}`,
-                                  )
+                                  onPreviewDoc(conf.bankDocId!, 'Bank Proof')
                                 }
                                 className="text-xs font-medium text-blue-700 hover:underline cursor-pointer"
                               >
-                                View {conf.cycleMonth} Proof
+                                View Bank Proof
                               </button>
                             </div>
                           )}
@@ -551,10 +547,7 @@ export function AgentDossierDrawer({
                     >
                       <div>
                         <p className="text-sm font-medium text-slate-900">
-                          Bank Statement / Proof ·{' '}
-                          <span className="font-mono tabular-nums">
-                            {c.cycleMonth}
-                          </span>
+                          Bank Statement / Proof
                         </p>
                         <p className="text-xs text-slate-500">
                           {c.bankDocName}
@@ -563,14 +556,11 @@ export function AgentDossierDrawer({
                       <button
                         type="button"
                         onClick={() =>
-                          onPreviewDoc(
-                            c.bankDocId!,
-                            `Bank Proof ${c.cycleMonth}`,
-                          )
+                          onPreviewDoc(c.bankDocId!, 'Bank Proof')
                         }
                         className="px-3 py-1.5 text-xs font-medium text-blue-700 border border-blue-200 bg-blue-50/50 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
                       >
-                        Preview {c.cycleMonth}
+                        Preview
                       </button>
                     </div>
                   ))}
@@ -594,7 +584,6 @@ export function AgentDossierDrawer({
                             {log.actorName}
                           </span>{' '}
                           ({log.actorRole.replace('_', ' ')})
-                          {log.isLateAfterCutoff && ' · Late after 2nd cutoff'}
                         </span>
                         <span className="font-mono tabular-nums">
                           {formatTimestamp(log.timestamp)}
