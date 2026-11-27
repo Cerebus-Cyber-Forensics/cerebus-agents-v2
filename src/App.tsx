@@ -638,10 +638,8 @@ function LedgerDashboard() {
                 <OverviewView
                   agents={agents}
                   confirmations={confirmations}
-                  auditLogs={auditLogs}
                   activeCycle={activeCycle}
                   onNavigate={setActiveView}
-                  onSelectAgent={(agent) => setSelectedAgentId(agent.agentId)}
                 />
               )}
 

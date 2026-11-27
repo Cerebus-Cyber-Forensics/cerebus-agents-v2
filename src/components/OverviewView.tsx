@@ -4,31 +4,22 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
-import {
-  AgentRecord,
-  AuditLogEntry,
-  MonthlyConfirmation,
-} from '../types';
-import { formatTimestamp, toMillis } from '../utils/cycleUtils';
+import { AgentRecord, MonthlyConfirmation } from '../types';
 
 interface OverviewViewProps {
   agents: AgentRecord[];
   confirmations: MonthlyConfirmation[];
-  auditLogs: AuditLogEntry[];
   activeCycle: string;
   onNavigate: (
     view: 'overview' | 'agents' | 'verify' | 'audit' | 'access',
   ) => void;
-  onSelectAgent: (agent: AgentRecord) => void;
 }
 
 export function OverviewView({
   agents,
   confirmations,
-  auditLogs,
   activeCycle,
   onNavigate,
-  onSelectAgent,
 }: OverviewViewProps) {
   const cycleConfs = confirmations.filter((c) => c.cycleMonth === activeCycle);
   const confByAgent = new Map(cycleConfs.map((c) => [c.agentId, c]));
@@ -81,10 +72,6 @@ export function OverviewView({
     }
     leaderMap.set(leader, current);
   }
-
-  const recentLogs = [...auditLogs]
-    .sort((a, b) => toMillis(b.timestamp) - toMillis(a.timestamp))
-    .slice(0, 6);
 
   return (
     <div className="space-y-6">
@@ -143,124 +130,66 @@ export function OverviewView({
         </div>
       </div>
 
-      {/* Team Leader Compliance & Recent Audit Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-6 bg-white border border-slate-200 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-900">
-              Team Leader Breakdown
-            </h3>
-            <button
-              type="button"
-              onClick={() => onNavigate('agents')}
-              className="text-xs font-medium text-blue-700 hover:underline cursor-pointer"
-            >
-              View Directory
-            </button>
+      {/* Team Leader Compliance */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-900">
+            Team Leader Breakdown
+          </h3>
+          <button
+            type="button"
+            onClick={() => onNavigate('agents')}
+            className="text-xs font-medium text-blue-700 hover:underline cursor-pointer"
+          >
+            View Directory
+          </button>
+        </div>
+        {leaderMap.size === 0 ? (
+          <div className="p-6 text-sm text-slate-500">
+            No agents registered yet.
           </div>
-          {leaderMap.size === 0 ? (
-            <div className="p-6 text-sm text-slate-500">
-              No agents registered yet.
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500">
-                <tr>
-                  <th className="px-5 py-2.5 text-left font-medium">
-                    Team Leader
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-medium">Agents</th>
-                  <th className="px-3 py-2.5 text-right font-medium">
-                    Verified
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-medium">
-                    Review
-                  </th>
-                  <th className="px-5 py-2.5 text-right font-medium">
-                    Pending
-                  </th>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500">
+              <tr>
+                <th className="px-5 py-2.5 text-left font-medium">
+                  Team Leader
+                </th>
+                <th className="px-3 py-2.5 text-right font-medium">Agents</th>
+                <th className="px-3 py-2.5 text-right font-medium">
+                  Verified
+                </th>
+                <th className="px-3 py-2.5 text-right font-medium">
+                  Review
+                </th>
+                <th className="px-5 py-2.5 text-right font-medium">
+                  Pending
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {Array.from(leaderMap.entries()).map(([leader, stats]) => (
+                <tr key={leader} className="hover:bg-slate-50/70">
+                  <td className="px-5 py-3 font-medium text-slate-900">
+                    {leader}
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono tabular-nums text-slate-700">
+                    {stats.total}
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono tabular-nums text-emerald-700">
+                    {stats.verified}
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono tabular-nums text-amber-700">
+                    {stats.needsReview}
+                  </td>
+                  <td className="px-5 py-3 text-right font-mono tabular-nums text-slate-500">
+                    {stats.pending}
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {Array.from(leaderMap.entries()).map(([leader, stats]) => (
-                  <tr key={leader} className="hover:bg-slate-50/70">
-                    <td className="px-5 py-3 font-medium text-slate-900">
-                      {leader}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums text-slate-700">
-                      {stats.total}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums text-emerald-700">
-                      {stats.verified}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums text-amber-700">
-                      {stats.needsReview}
-                    </td>
-                    <td className="px-5 py-3 text-right font-mono tabular-nums text-slate-500">
-                      {stats.pending}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <div className="lg:col-span-6 bg-white border border-slate-200 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-900">
-              Recent Paper Trail Events
-            </h3>
-            <button
-              type="button"
-              onClick={() => onNavigate('audit')}
-              className="text-xs font-medium text-blue-700 hover:underline cursor-pointer"
-            >
-              Full Audit Log
-            </button>
-          </div>
-          {recentLogs.length === 0 ? (
-            <div className="p-6 text-sm text-slate-500">
-              No audit log entries recorded yet.
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-200">
-              {recentLogs.map((log) => {
-                const matchedAgent = agents.find(
-                  (a) => a.agentId === log.agentId,
-                );
-                return (
-                  <div
-                    key={log.logId}
-                    className="px-5 py-3.5 flex items-start justify-between gap-4 hover:bg-slate-50/70"
-                  >
-                    <div className="min-w-0 space-y-0.5">
-                      <p className="text-sm text-slate-800 truncate">
-                        {log.summary}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-slate-500">
-                        <span>{log.actorName}</span>
-                        <span aria-hidden="true">·</span>
-                        <span className="font-mono tabular-nums">
-                          {formatTimestamp(log.timestamp)}
-                        </span>
-                      </div>
-                    </div>
-                    {matchedAgent && (
-                      <button
-                        type="button"
-                        onClick={() => onSelectAgent(matchedAgent)}
-                        className="text-xs font-medium text-blue-700 hover:underline whitespace-nowrap shrink-0 cursor-pointer"
-                      >
-                        Inspect
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
