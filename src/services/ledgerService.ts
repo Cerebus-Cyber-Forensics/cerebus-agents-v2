@@ -24,7 +24,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import {
   AccountType,
   ActionKind,
@@ -972,6 +972,122 @@ export interface MonthlyBankingSubmission {
   existingConfirmation?: MonthlyConfirmation | null;
 }
 
+export interface WritePermissionCheckResult {
+  allowed: boolean;
+  path: string;
+  reason?: string;
+  liveConfirmation?: MonthlyConfirmation | null;
+}
+
+const VALID_DOC_ID_REGEX = /^[a-zA-Z0-9_\-]+$/;
+
+export async function validateConfirmationWritePermission(
+  agent: AgentRecord,
+  cycleMonth: string,
+  existingConfirmation: MonthlyConfirmation | null | undefined,
+  actor: UserAccount,
+): Promise<WritePermissionCheckResult> {
+  const confirmationId = `${agent.agentId}_${cycleMonth}`;
+  const path = `monthly_confirmations/${confirmationId}`;
+  const currentUser = auth.currentUser;
+
+  if (!currentUser || currentUser.uid !== actor.uid) {
+    return {
+      allowed: false,
+      path,
+      reason: 'Your session has expired. Please sign in again before confirming.',
+    };
+  }
+
+  if (
+    !VALID_DOC_ID_REGEX.test(agent.agentId) ||
+    !/^\d{6}$/.test(cycleMonth) ||
+    !VALID_DOC_ID_REGEX.test(confirmationId) ||
+    confirmationId.length > 140
+  ) {
+    return {
+      allowed: false,
+      path,
+      reason: 'Invalid agent or cycle path identifier.',
+    };
+  }
+
+  let liveAgent: AgentRecord;
+  try {
+    const agentSnap = await getDoc(doc(db, 'agents', agent.agentId));
+    if (!agentSnap.exists()) {
+      return {
+        allowed: false,
+        path: `agents/${agent.agentId}`,
+        reason: 'This agent dossier no longer exists in the ledger.',
+      };
+    }
+    liveAgent = agentSnap.data() as AgentRecord;
+  } catch {
+    return {
+      allowed: false,
+      path: `agents/${agent.agentId}`,
+      reason: 'You are not authorized to access or update this agent record.',
+    };
+  }
+
+  if (actor.role === 'team_leader') {
+    if (liveAgent.cerebusTeamLeader !== (actor.teamLeaderName || '')) {
+      return {
+        allowed: false,
+        path,
+        reason: `You are only authorized to confirm banking details for agents assigned to ${actor.teamLeaderName || 'your team'}.`,
+      };
+    }
+  } else if (actor.role === 'agent') {
+    const verifiedEmailMatch =
+      Boolean(currentUser.emailVerified) &&
+      Boolean(currentUser.email) &&
+      liveAgent.emailAddress.toLowerCase() === currentUser.email!.toLowerCase();
+    const ownsAgent = liveAgent.ownerUid === actor.uid || verifiedEmailMatch;
+    if (!ownsAgent) {
+      return {
+        allowed: false,
+        path,
+        reason:
+          'Your signed-in account is not linked as the owner of this agent dossier.',
+      };
+    }
+  }
+
+  let liveConfirmation: MonthlyConfirmation | null = existingConfirmation ?? null;
+  try {
+    const confSnap = await getDoc(doc(db, 'monthly_confirmations', confirmationId));
+    liveConfirmation = confSnap.exists()
+      ? (confSnap.data() as MonthlyConfirmation)
+      : null;
+  } catch {
+    return {
+      allowed: false,
+      path,
+      reason: `You do not have write permission for ${path}.`,
+    };
+  }
+
+  if (
+    liveConfirmation?.verificationStatus === 'verified' &&
+    actor.role === 'agent'
+  ) {
+    return {
+      allowed: false,
+      path,
+      liveConfirmation,
+      reason: `Cycle ${cycleMonth} is already verified for payout and cannot be modified by an agent.`,
+    };
+  }
+
+  return {
+    allowed: true,
+    path,
+    liveConfirmation,
+  };
+}
+
 export async function submitMonthlyBankConfirmation(
   payload: MonthlyBankingSubmission,
   actor: UserAccount,
@@ -981,26 +1097,20 @@ export async function submitMonthlyBankConfirmation(
   const cutoff = getCutoffStatus(cycleMonth);
   const confirmationRef = doc(db, 'monthly_confirmations', confirmationId);
 
-  let resolvedExisting = existingConfirmation ?? null;
-  if (!resolvedExisting) {
-    try {
-      const existingSnap = await getDoc(confirmationRef);
-      if (existingSnap.exists()) {
-        resolvedExisting = existingSnap.data() as MonthlyConfirmation;
-      }
-    } catch {
-      // Document may not exist yet or cannot be read prior to write
-    }
-  }
-
-  if (
-    resolvedExisting?.verificationStatus === 'verified' &&
-    actor.role === 'agent'
-  ) {
+  const permCheck = await validateConfirmationWritePermission(
+    agent,
+    cycleMonth,
+    existingConfirmation,
+    actor,
+  );
+  if (!permCheck.allowed) {
     throw new Error(
-      `Cycle ${cycleMonth} is already verified for payout and cannot be modified by an agent.`,
+      permCheck.reason ||
+        `You are not authorized to write to ${permCheck.path}.`,
     );
   }
+
+  const resolvedExisting = permCheck.liveConfirmation ?? null;
 
   const nextBank = {
     bankNameAndCode: sanitizeStr(

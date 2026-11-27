@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -6,7 +6,11 @@ import {
   Loader2,
   X,
 } from 'lucide-react';
-import { submitMonthlyBankConfirmation } from '../services/ledgerService';
+import {
+  submitMonthlyBankConfirmation,
+  validateConfirmationWritePermission,
+  WritePermissionCheckResult,
+} from '../services/ledgerService';
 import {
   ACCOUNT_TYPES,
   AccountType,
@@ -60,7 +64,31 @@ export function MonthlyConfirmModal({
   const [bankFile, setBankFile] = useState<ProcessedUploadFile | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [permissionCheck, setPermissionCheck] =
+    useState<WritePermissionCheckResult | null>(null);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setCheckingAuth(true);
+    void validateConfirmationWritePermission(
+      agent,
+      cycleMonth,
+      existingConfirmation,
+      actor,
+    ).then((result) => {
+      if (!active) return;
+      setPermissionCheck(result);
+      setCheckingAuth(false);
+      if (!result.allowed && result.reason) {
+        setError(result.reason);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [agent, cycleMonth, existingConfirmation, actor]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -126,6 +154,14 @@ export function MonthlyConfirmModal({
       return;
     }
 
+    if (permissionCheck && !permissionCheck.allowed) {
+      setError(
+        permissionCheck.reason ||
+          `You are not authorized to write to ${permissionCheck.path}.`,
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       await submitMonthlyBankConfirmation(
@@ -138,7 +174,8 @@ export function MonthlyConfirmModal({
           accountType,
           accountNumber,
           bankFile: mode === 'updated_banking' ? bankFile : null,
-          existingConfirmation,
+          existingConfirmation:
+            permissionCheck?.liveConfirmation ?? existingConfirmation,
         },
         actor,
       );
@@ -374,14 +411,23 @@ export function MonthlyConfirmModal({
             </button>
             <button
               type="submit"
-              disabled={submitting || uploadingFile}
+              disabled={
+                submitting ||
+                uploadingFile ||
+                checkingAuth ||
+                (permissionCheck !== null && !permissionCheck.allowed)
+              }
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0812B8] hover:bg-[#060E94] disabled:opacity-60 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
             >
-              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {(submitting || checkingAuth) && (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              )}
               <span>
-                {mode === 'updated_banking'
-                  ? `Submit Updated Banking (${cycleMonth})`
-                  : `Confirm Banking (${cycleMonth})`}
+                {checkingAuth
+                  ? 'Verifying Access...'
+                  : mode === 'updated_banking'
+                    ? `Submit Updated Banking (${cycleMonth})`
+                    : `Confirm Banking (${cycleMonth})`}
               </span>
             </button>
           </div>

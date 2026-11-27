@@ -92,6 +92,27 @@ service cloud.firestore {
         : getAfter(/databases/$(database)/documents/agents/$(agentId)).data;
     }
 
+    function isAuthorizedToWriteAgentPath(agentId) {
+      return isSignedIn()
+        && isValidId(agentId)
+        && agentExistsOrCreatedInBatch(agentId)
+        && (
+          isAdmin() ||
+          isTeamLeaderFor(parentAgentData(agentId).cerebusTeamLeader) ||
+          isAgentRecordOwner(parentAgentData(agentId))
+        );
+    }
+
+    function isAuthorizedConfirmationPathWrite(confirmationId, data) {
+      return isAuthorizedToWriteAgentPath(data.agentId)
+        && confirmationId == (data.agentId + '_' + data.cycleMonth)
+        && (
+          isAdmin() ||
+          isTeamLeaderFor(parentAgentData(data.agentId).cerebusTeamLeader) ||
+          isAgentRecordOwner(data)
+        );
+    }
+
     // -------------------------------------------------------------------------
     // Entity Validation Blueprints
     // -------------------------------------------------------------------------
@@ -406,25 +427,17 @@ service cloud.firestore {
       allow create: if isValidId(confirmationId)
         && isValidMonthlyConfirmation(incoming())
         && incoming().confirmationId == confirmationId
+        && incoming().confirmationId == (incoming().agentId + '_' + incoming().cycleMonth)
         && incoming().submittedAt == request.time
         && incoming().updatedAt == request.time
         && (
           (
             isSignedIn()
-            && agentExistsOrCreatedInBatch(incoming().agentId)
             && incoming().submittedByUid == request.auth.uid
+            && isAuthorizedConfirmationPathWrite(confirmationId, incoming())
             && (
               isAdmin() ||
-              (
-                (
-                  isTeamLeaderFor(parentAgentData(incoming().agentId).cerebusTeamLeader) ||
-                  (
-                    isAgentRecordOwner(parentAgentData(incoming().agentId)) &&
-                    isAgentRecordOwner(incoming())
-                  )
-                )
-                && incoming().verificationStatus in ['pending', 'confirmed', 'late_flagged']
-              )
+              incoming().verificationStatus in ['pending', 'confirmed', 'late_flagged']
             )
           ) ||
           (
@@ -456,7 +469,8 @@ service cloud.firestore {
             ])
           ) ||
           (
-            isAgentRecordOwner(existing())
+            (isAgentRecordOwner(existing()) || isAuthorizedToWriteAgentPath(existing().agentId))
+            && isAuthorizedConfirmationPathWrite(confirmationId, incoming())
             && existing().verificationStatus != 'verified'
             && incoming().verificationStatus in ['confirmed', 'late_flagged']
             && (incoming().ownerUid == existing().ownerUid || incoming().ownerUid == request.auth.uid)
@@ -488,15 +502,12 @@ service cloud.firestore {
         && (
           (
             isSignedIn()
-            && agentExistsOrCreatedInBatch(incoming().agentId)
             && incoming().uploadedByUid == request.auth.uid
+            && isAuthorizedToWriteAgentPath(incoming().agentId)
             && (
               isAdmin() ||
               isTeamLeaderFor(parentAgentData(incoming().agentId).cerebusTeamLeader) ||
-              (
-                isAgentRecordOwner(parentAgentData(incoming().agentId)) &&
-                isAgentRecordOwner(incoming())
-              )
+              isAgentRecordOwner(incoming())
             )
           ) ||
           (
@@ -534,13 +545,10 @@ service cloud.firestore {
             && (
               isAdmin() ||
               (
-                agentExistsOrCreatedInBatch(incoming().agentId) &&
+                isAuthorizedToWriteAgentPath(incoming().agentId) &&
                 (
                   isTeamLeaderFor(parentAgentData(incoming().agentId).cerebusTeamLeader) ||
-                  (
-                    isAgentRecordOwner(parentAgentData(incoming().agentId)) &&
-                    isAgentRecordOwner(incoming())
-                  )
+                  isAgentRecordOwner(incoming())
                 )
               )
             )
