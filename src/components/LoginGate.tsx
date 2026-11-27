@@ -83,7 +83,7 @@ export function LoginGate() {
               src="/assets/aistudio/image_3b1feb10.png"
               alt="Cerebus Cyber Forensics"
               referrerPolicy="no-referrer"
-              className="h-9 w-auto object-contain"
+              className="h-9 w-auto object-contain cerebus-brand-logo"
             />
           </div>
         </div>

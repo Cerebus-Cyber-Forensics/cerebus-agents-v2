@@ -57,7 +57,7 @@ export function InviteSignupPortal() {
               src="/assets/aistudio/image_3b1feb10.png"
               alt="Cerebus Cyber Forensics"
               referrerPolicy="no-referrer"
-              className="h-9 w-auto object-contain shrink-0"
+              className="h-9 w-auto object-contain shrink-0 cerebus-brand-logo"
             />
             <span className="hidden sm:inline-block h-5 w-px bg-slate-200" />
             <span className="hidden sm:inline text-xs font-medium text-slate-600 truncate">

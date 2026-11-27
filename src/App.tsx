@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
+  Contrast,
   Copy,
   ExternalLink,
   History,
@@ -13,8 +14,10 @@ import {
   Loader2,
   LogOut,
   Menu,
+  Moon,
   Plus,
   Shield,
+  Sun,
   Trash2,
   UserCheck,
   Users,
@@ -54,6 +57,12 @@ import {
 } from './types';
 import { getCurrentCycleMonth } from './utils/cycleUtils';
 import { getUserRoleTheme } from './utils/roleTheme';
+import {
+  AppThemeMode,
+  THEME_OPTIONS,
+  applyThemeMode,
+  getStoredThemeMode,
+} from './utils/themeUtils';
 
 type NavView = 'overview' | 'agents' | 'verify' | 'audit' | 'access';
 
@@ -79,7 +88,10 @@ function LedgerDashboard() {
   const [activeView, setActiveView] = useState<NavView>('overview');
   const [activeCycle] = useState<string>(() => getCurrentCycleMonth());
 
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState<AppThemeMode>(() =>
+    getStoredThemeMode(),
+  );
   const [toastMessage, setToastMessage] = useState('');
 
   // Modal & Drawer states
@@ -107,6 +119,22 @@ function LedgerDashboard() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
   };
+
+  const handleSelectTheme = (mode: AppThemeMode) => {
+    setThemeMode(mode);
+    applyThemeMode(mode);
+  };
+
+  useEffect(() => {
+    if (!navDrawerOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setNavDrawerOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navDrawerOpen]);
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -414,179 +442,181 @@ function LedgerDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex lg:w-[248px] lg:flex-col lg:fixed lg:inset-y-0 bg-white border-r border-slate-200">
-        <div className="px-5 py-3.5 border-b border-slate-200 flex items-center">
-          <img
-            src="/assets/aistudio/image_3b1feb10.png"
-            alt="Cerebus Cyber Forensics"
-            referrerPolicy="no-referrer"
-            className="h-9 w-auto object-contain"
-          />
-        </div>
-
-        <nav className="flex-1 px-3 py-4 space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = activeView === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setActiveView(item.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
-                  active
-                    ? 'bg-[#0812B8]/8 text-[#0812B8]'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }`}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="p-4 border-t border-slate-200 space-y-3">
-          <div
-            className={`rounded-xl border p-3 transition-colors ${roleTheme.cardBg} ${roleTheme.cardBorder}`}
-          >
-            <div className="flex items-start gap-2.5 min-w-0">
-              <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold shrink-0 ${roleTheme.avatarBg}`}
-              >
-                {profileInitials}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p
-                  className={`text-sm font-semibold truncate ${roleTheme.nameText}`}
-                >
-                  {userAccount.displayName}
-                </p>
-                <p className={`text-xs truncate ${roleTheme.emailText}`}>
-                  {userAccount.email}
-                </p>
-                <div className="flex items-center gap-1.5 mt-1.5">
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${roleTheme.dotBg}`}
-                  />
-                  <span
-                    className={`text-xs font-semibold truncate ${roleTheme.roleText}`}
-                  >
-                    {roleTheme.label}
-                    {userAccount.teamLeaderName
-                      ? ` · ${userAccount.teamLeaderName}`
-                      : ''}
-                  </span>
-                </div>
-              </div>
-            </div>
+      {/* Slide-out Navigation Drawer (All Screen Sizes) */}
+      <div
+        aria-hidden={!navDrawerOpen}
+        className={`fixed inset-0 z-50 transition-opacity duration-200 ${
+          navDrawerOpen
+            ? 'opacity-100 pointer-events-auto'
+            : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        <div
+          onClick={() => setNavDrawerOpen(false)}
+          className="absolute inset-0 bg-slate-900/45 backdrop-blur-[1px]"
+        />
+        <aside
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation Drawer"
+          className={`relative w-72 max-w-[85vw] bg-white h-full border-r border-slate-200 shadow-2xl flex flex-col transition-transform duration-200 ease-out ${
+            navDrawerOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between gap-3">
+            <img
+              src="/assets/aistudio/image_3b1feb10.png"
+              alt="Cerebus Cyber Forensics"
+              referrerPolicy="no-referrer"
+              className="h-9 w-auto object-contain cerebus-brand-logo"
+            />
+            <button
+              type="button"
+              onClick={() => setNavDrawerOpen(false)}
+              aria-label="Close navigation drawer"
+              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
-          </button>
-        </div>
-      </aside>
 
-      {/* Mobile Sidebar Drawer */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden bg-slate-900/40 flex">
-          <div className="w-64 bg-white h-full border-r border-slate-200 flex flex-col">
-            <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
-              <img
-                src="/assets/aistudio/image_3b1feb10.png"
-                alt="Cerebus Cyber Forensics"
-                referrerPolicy="no-referrer"
-                className="h-8 w-auto object-contain"
-              />
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen(false)}
-                aria-label="Close navigation menu"
-                className="p-1.5 text-slate-500 hover:text-slate-900 rounded-lg cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = activeView === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveView(item.id);
+                    setNavDrawerOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
+                    active
+                      ? 'bg-[#0812B8]/8 text-[#0812B8]'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Theme Setting inside Drawer */}
+          <div className="px-4 py-3 border-t border-slate-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Theme Setting
+              </span>
+              <span className="text-[11px] text-slate-500 capitalize">
+                {THEME_OPTIONS.find((t) => t.id === themeMode)?.description}
+              </span>
             </div>
-            <nav className="flex-1 px-3 py-4 space-y-1">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const active = activeView === item.id;
+            <div
+              role="group"
+              aria-label="Theme setting"
+              className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200"
+            >
+              {THEME_OPTIONS.map((option) => {
+                const selected = themeMode === option.id;
+                const ThemeIcon =
+                  option.id === 'white'
+                    ? Sun
+                    : option.id === 'black'
+                      ? Moon
+                      : Contrast;
                 return (
                   <button
-                    key={item.id}
+                    key={option.id}
                     type="button"
-                    onClick={() => {
-                      setActiveView(item.id);
-                      setMobileMenuOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer ${
-                      active
-                        ? 'bg-[#0812B8]/8 text-[#0812B8]'
-                        : 'text-slate-600 hover:bg-slate-100'
+                    onClick={() => handleSelectTheme(option.id)}
+                    aria-pressed={selected}
+                    className={`inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                      selected
+                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+                        : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    <Icon className="w-4 h-4" />
-                    <span>{item.label}</span>
+                    <ThemeIcon className="w-3.5 h-3.5 shrink-0" />
+                    <span>{option.label}</span>
                   </button>
                 );
               })}
-            </nav>
-            <div className="p-4 border-t border-slate-200 space-y-3">
-              <div
-                className={`rounded-xl border p-3 ${roleTheme.cardBg} ${roleTheme.cardBorder}`}
-              >
-                <p
-                  className={`text-sm font-semibold truncate ${roleTheme.nameText}`}
-                >
-                  {userAccount.displayName}
-                </p>
-                <p className={`text-xs truncate ${roleTheme.emailText}`}>
-                  {userAccount.email}
-                </p>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${roleTheme.dotBg}`}
-                  />
-                  <span className={`text-xs font-semibold ${roleTheme.roleText}`}>
-                    {roleTheme.label}
-                    {userAccount.teamLeaderName
-                      ? ` · ${userAccount.teamLeaderName}`
-                      : ''}
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg cursor-pointer"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Sign Out</span>
-              </button>
             </div>
           </div>
-        </div>
-      )}
+
+          <div className="p-4 border-t border-slate-200 space-y-3">
+            <div
+              className={`rounded-xl border p-3 transition-colors ${roleTheme.cardBg} ${roleTheme.cardBorder}`}
+            >
+              <div className="flex items-start gap-2.5 min-w-0">
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold shrink-0 ${roleTheme.avatarBg}`}
+                >
+                  {profileInitials}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={`text-sm font-semibold truncate ${roleTheme.nameText}`}
+                  >
+                    {userAccount.displayName}
+                  </p>
+                  <p className={`text-xs truncate ${roleTheme.emailText}`}>
+                    {userAccount.email}
+                  </p>
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${roleTheme.dotBg}`}
+                    />
+                    <span
+                      className={`text-xs font-semibold truncate ${roleTheme.roleText}`}
+                    >
+                      {roleTheme.label}
+                      {userAccount.teamLeaderName
+                        ? ` · ${userAccount.teamLeaderName}`
+                        : ''}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        </aside>
+      </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 lg:pl-[248px] flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Contextual Top Header */}
-        <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between gap-4">
+        <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Open navigation menu"
-              className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+              onClick={() => setNavDrawerOpen(true)}
+              aria-label="Open navigation drawer"
+              aria-expanded={navDrawerOpen}
+              className="inline-flex items-center gap-2 px-2.5 py-2 text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer shrink-0"
             >
               <Menu className="w-4 h-4" />
+              <span className="hidden sm:inline">Menu</span>
             </button>
+            <img
+              src="/assets/aistudio/image_3b1feb10.png"
+              alt="Cerebus Cyber Forensics"
+              referrerPolicy="no-referrer"
+              className="h-7 w-auto object-contain hidden md:block shrink-0 cerebus-brand-logo"
+            />
+            <span className="hidden md:inline-block h-4 w-px bg-slate-200 shrink-0" />
             <div className="flex items-center gap-2 text-sm truncate">
               <span className="text-slate-400 hidden sm:inline">
                 Operations
@@ -598,7 +628,41 @@ function LedgerDashboard() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0">
+            {/* Quick Theme Switcher */}
+            <div
+              role="group"
+              aria-label="Quick theme setting"
+              className="hidden sm:inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200"
+            >
+              {THEME_OPTIONS.map((option) => {
+                const selected = themeMode === option.id;
+                const ThemeIcon =
+                  option.id === 'white'
+                    ? Sun
+                    : option.id === 'black'
+                      ? Moon
+                      : Contrast;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => handleSelectTheme(option.id)}
+                    aria-pressed={selected}
+                    title={option.description}
+                    className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                      selected
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <ThemeIcon className="w-3 h-3 shrink-0" />
+                    <span>{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
             {isStaff && (
               <>
                 <button
