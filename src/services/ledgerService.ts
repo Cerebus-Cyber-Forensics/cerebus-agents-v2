@@ -1602,6 +1602,106 @@ export async function verifyOrRejectMonthlyPayment(
   }
 }
 
+export async function batchVerifyMonthlyPayments(
+  confirmations: MonthlyConfirmation[],
+  actor: UserAccount,
+  notesByConf: Record<string, string> = {},
+): Promise<number> {
+  const uniquePending = Array.from(
+    new Map(
+      confirmations
+        .filter((c) => c.verificationStatus !== 'verified')
+        .map((c) => [c.confirmationId, c]),
+    ).values(),
+  );
+
+  if (uniquePending.length === 0) {
+    return 0;
+  }
+
+  const nowIso = new Date().toISOString().slice(0, 19) + 'Z';
+  const actorName = sanitizeStr(actor.displayName, 120);
+  const actorEmail = sanitizeStr(actor.email, FIELD_LIMITS.email);
+
+  // 2 Firestore writes per confirmation (update confirmation + create audit log); chunk at 200 (400 ops <= 500 batch limit)
+  const CHUNK_SIZE = 200;
+  for (let i = 0; i < uniquePending.length; i += CHUNK_SIZE) {
+    const chunk = uniquePending.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+
+    for (const confirmation of chunk) {
+      const rawNote =
+        notesByConf[confirmation.confirmationId] ??
+        confirmation.reviewerNotes ??
+        '';
+      const notes = sanitizeStr(rawNote.trim(), FIELD_LIMITS.reviewerNotes);
+
+      batch.update(
+        doc(db, 'monthly_confirmations', confirmation.confirmationId),
+        {
+          verificationStatus: 'verified',
+          verifiedByUid: actor.uid,
+          verifiedByName: actorName,
+          verifiedAt: nowIso,
+          reviewerNotes: notes,
+          updatedAt: serverTimestamp(),
+        },
+      );
+
+      const logId = makeId('log');
+      batch.set(doc(db, 'audit_logs', logId), {
+        logId,
+        timestamp: serverTimestamp(),
+        actorUid: actor.uid,
+        actorName,
+        actorEmail,
+        actorRole: actor.role,
+        agentId: confirmation.agentId,
+        ownerUid: confirmation.ownerUid,
+        emailAddress: confirmation.emailAddress,
+        agentCode: confirmation.agentCode,
+        agentName: confirmation.agentName,
+        cerebusTeamLeader: confirmation.cerebusTeamLeader,
+        actionType: 'payment_verified' as AuditActionType,
+        cycleMonth: confirmation.cycleMonth,
+        isLateAfterCutoff: false,
+        summary: sanitizeStr(
+          `${actor.displayName} batch-verified banking details for ${confirmation.agentCode}.`,
+          FIELD_LIMITS.summary,
+        ),
+        changes: [
+          {
+            field: 'Verification status',
+            previousValue: confirmation.verificationStatus,
+            newValue: 'verified',
+          },
+          ...(notes
+            ? [
+                {
+                  field: 'Reviewer notes',
+                  previousValue: confirmation.reviewerNotes || '(none)',
+                  newValue: notes,
+                },
+              ]
+            : []),
+        ],
+      });
+    }
+
+    try {
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(
+        error,
+        OperationType.UPDATE,
+        `monthly_confirmations/${chunk[0]?.confirmationId || 'batch'}`,
+      );
+    }
+  }
+
+  return uniquePending.length;
+}
+
 export async function updateUserRole(
   targetUser: UserAccount,
   role: UserRole,
