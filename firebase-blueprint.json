@@ -47,6 +47,17 @@
           "type": "string",
           "format": "date-time",
           "description": "Server timestamp when user account was last updated."
+        },
+        "lastSignInAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of the user's most recent authenticated sign-in."
+        },
+        "accountStatus": {
+          "type": "string",
+          "description": "Lifecycle status of the user account.",
+          "enum": ["active", "disabled", "archived"],
+          "maxLength": 32
         }
       },
       "required": ["uid", "email", "displayName", "role", "createdAt", "updatedAt"]
@@ -625,7 +636,8 @@
             "document_uploaded",
             "payment_verified",
             "payment_rejected",
-            "role_updated"
+            "role_updated",
+            "user_status_updated"
           ],
           "maxLength": 40
         },

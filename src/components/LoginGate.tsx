@@ -114,7 +114,7 @@ export function LoginGate() {
               <div className="flex items-start gap-3">
                 <FileCheck2 className="w-4 h-4 text-[#0812B8] mt-0.5 shrink-0" />
                 <p className="text-sm text-slate-700">
-                  <span className="font-medium text-slate-900">Verified Compliance Vault:</span> Manage ID/Passport copies, contracts, uniform sizing, and bank proofs in one dossier.
+                  <span className="font-medium text-slate-900">Verified Compliance Vault:</span> Manage ID/Passport copies, uniform sizing, and bank proofs in one dossier.
                 </p>
               </div>
               <div className="flex items-start gap-3">

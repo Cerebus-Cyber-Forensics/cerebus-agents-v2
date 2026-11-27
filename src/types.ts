@@ -1,5 +1,7 @@
 export type UserRole = 'admin' | 'team_leader' | 'agent';
 
+export type UserAccountStatus = 'active' | 'disabled' | 'archived';
+
 export type IdDocumentType =
   | 'National ID'
   | 'Passport'
@@ -41,7 +43,8 @@ export type AuditActionType =
   | 'document_uploaded'
   | 'payment_verified'
   | 'payment_rejected'
-  | 'role_updated';
+  | 'role_updated'
+  | 'user_status_updated';
 
 export interface UserAccount {
   uid: string;
@@ -52,6 +55,8 @@ export interface UserAccount {
   linkedAgentId?: string;
   createdAt: unknown;
   updatedAt: unknown;
+  lastSignInAt?: unknown;
+  accountStatus?: UserAccountStatus;
 }
 
 export interface AgentRecord {

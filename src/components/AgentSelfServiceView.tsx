@@ -535,23 +535,6 @@ export function AgentSelfServiceView({
                   </button>
                 )}
               </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-700 truncate">
-                  Contract: {agent.contractDocName || 'Not uploaded'}
-                </span>
-                {agent.contractDocId && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onPreviewDoc(agent.contractDocId!, 'Agent Contract')
-                    }
-                    className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:underline cursor-pointer shrink-0"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    Preview
-                  </button>
-                )}
-              </div>
               {activeConf?.bankDocId && (
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-slate-700 truncate">

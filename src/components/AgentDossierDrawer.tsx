@@ -514,30 +514,6 @@ export function AgentDossierDrawer({
                   )}
                 </div>
 
-                <div className="p-4 flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">
-                      Signed Agent Contract
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {agent.contractDocName || 'Not uploaded yet'}
-                    </p>
-                  </div>
-                  {agent.contractDocId ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onPreviewDoc(agent.contractDocId!, 'Agent Contract')
-                      }
-                      className="px-3 py-1.5 text-xs font-medium text-blue-700 border border-blue-200 bg-blue-50/50 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
-                    >
-                      Preview Contract
-                    </button>
-                  ) : (
-                    <span className="text-xs text-red-700">Missing</span>
-                  )}
-                </div>
-
                 {agentConfirmations
                   .filter((c) => Boolean(c.bankDocId))
                   .map((c) => (

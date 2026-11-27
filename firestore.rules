@@ -45,12 +45,21 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
+    function isActiveUserData(uData) {
+      return !('accountStatus' in uData) || uData.accountStatus == 'active';
+    }
+
+    function isActiveUserAccount() {
+      return !hasUserDoc() || isActiveUserData(userDoc());
+    }
+
     function isAdmin() {
-      return isBootstrappedAdmin() || (hasUserDoc() && ('role' in userDoc()) && userDoc().role == 'admin');
+      return isBootstrappedAdmin() || (hasUserDoc() && isActiveUserData(userDoc()) && ('role' in userDoc()) && userDoc().role == 'admin');
     }
 
     function isTeamLeaderFor(leaderName) {
       return hasUserDoc()
+        && isActiveUserData(userDoc())
         && ('role' in userDoc())
         && userDoc().role == 'team_leader'
         && ('teamLeaderName' in userDoc())
@@ -58,7 +67,7 @@ service cloud.firestore {
     }
 
     function isAgentRecordOwner(data) {
-      return isSignedIn() && (
+      return isSignedIn() && isActiveUserAccount() && (
         (('ownerUid' in data) && data.ownerUid == request.auth.uid) ||
         (
           ('email_verified' in request.auth.token) &&
@@ -107,9 +116,9 @@ service cloud.firestore {
       return isAuthorizedToWriteAgentPath(data.agentId)
         && confirmationId == (data.agentId + '_' + data.cycleMonth)
         && (
-          isAdmin() ||
-          isTeamLeaderFor(parentAgentData(data.agentId).cerebusTeamLeader) ||
-          isAgentRecordOwner(data)
+          data.ownerUid == parentAgentData(data.agentId).ownerUid ||
+          isAgentRecordOwner(data) ||
+          isAdmin()
         );
     }
 
@@ -119,7 +128,7 @@ service cloud.firestore {
 
     function isValidUserAccount(data) {
       return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'teamLeaderName', 'linkedAgentId', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'teamLeaderName', 'linkedAgentId', 'createdAt', 'updatedAt', 'lastSignInAt', 'accountStatus'])
         && isValidId(data.uid)
         && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
         && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
@@ -127,7 +136,9 @@ service cloud.firestore {
         && isOptionalString(data, 'teamLeaderName', 120)
         && isOptionalString(data, 'linkedAgentId', 128)
         && data.createdAt is timestamp
-        && data.updatedAt is timestamp;
+        && data.updatedAt is timestamp
+        && (!('lastSignInAt' in data) || data.lastSignInAt is timestamp)
+        && (!('accountStatus' in data) || data.accountStatus in ['active', 'disabled', 'archived']);
     }
 
     function isValidAgentRecord(data) {
@@ -290,7 +301,7 @@ service cloud.firestore {
         && data.actionType in [
           'agent_created', 'personal_info_updated', 'banking_updated',
           'monthly_confirmed', 'document_uploaded', 'payment_verified',
-          'payment_rejected', 'role_updated'
+          'payment_rejected', 'role_updated', 'user_status_updated'
         ]
         && data.cycleMonth is string && data.cycleMonth.size() <= 6
         && data.isLateAfterCutoff is bool
@@ -325,6 +336,7 @@ service cloud.firestore {
         && incoming().uid == uid
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
+        && (!('accountStatus' in incoming()) || incoming().accountStatus == 'active')
         && (
           (isBootstrappedAdmin() && incoming().role == 'admin') ||
           incoming().role == 'agent'
@@ -340,12 +352,16 @@ service cloud.firestore {
           isAdmin() ||
           (
             request.auth.uid == uid
+            && (!('accountStatus' in existing()) || existing().accountStatus == 'active')
             && incoming().role == existing().role
-            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'linkedAgentId', 'updatedAt'])
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'linkedAgentId', 'lastSignInAt', 'updatedAt'])
           )
         );
 
-      allow delete: if isAdmin() && isValidId(uid) && existing().role == 'agent';
+      allow delete: if isAdmin()
+        && isValidId(uid)
+        && uid != request.auth.uid
+        && existing().email != 'sikhosana.ts@gmail.com';
     }
 
     match /agents/{agentId} {
@@ -447,8 +463,8 @@ service cloud.firestore {
             && incoming().submittedByUid == request.auth.uid
             && isAuthorizedConfirmationPathWrite(confirmationId, incoming())
             && (
-              isAdmin() ||
-              incoming().verificationStatus in ['pending', 'confirmed', 'late_flagged']
+              incoming().verificationStatus in ['pending', 'confirmed', 'late_flagged'] ||
+              isAdmin()
             )
           ) ||
           (
@@ -516,9 +532,8 @@ service cloud.firestore {
             && incoming().uploadedByUid == request.auth.uid
             && isAuthorizedToWriteAgentPath(incoming().agentId)
             && (
-              isAdmin() ||
-              isTeamLeaderFor(parentAgentData(incoming().agentId).cerebusTeamLeader) ||
-              isAgentRecordOwner(incoming())
+              incoming().ownerUid == parentAgentData(incoming().agentId).ownerUid ||
+              isAdmin()
             )
           ) ||
           (
@@ -558,7 +573,7 @@ service cloud.firestore {
               (
                 isAuthorizedToWriteAgentPath(incoming().agentId) &&
                 (
-                  isTeamLeaderFor(parentAgentData(incoming().agentId).cerebusTeamLeader) ||
+                  incoming().ownerUid == parentAgentData(incoming().agentId).ownerUid ||
                   isAgentRecordOwner(incoming())
                 )
               )
@@ -587,7 +602,6 @@ service cloud.firestore {
         && incoming().bankKey == bankKey
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
-        && agentExistsOrCreatedInBatch(incoming().agentId)
         && (
           (
             isSignedIn()

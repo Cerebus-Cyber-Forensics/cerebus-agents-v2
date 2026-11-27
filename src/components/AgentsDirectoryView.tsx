@@ -173,7 +173,6 @@ export function AgentsDirectoryView({
       'Account type',
       'Account number',
       'ID Document On File',
-      'Contract On File',
       'Bank Document',
       'Banking Status',
       'Confirmation Action',
@@ -212,7 +211,6 @@ export function AgentsDirectoryView({
         conf?.accountType || a.accountType,
         conf?.accountNumber || a.accountNumber,
         a.idDocName || (a.idDocId ? 'Yes' : 'No'),
-        a.contractDocName || (a.contractDocId ? 'Yes' : 'No'),
         conf?.bankDocName || '',
         displayStatus,
         conf?.actionKind || '',
@@ -448,7 +446,6 @@ export function AgentsDirectoryView({
                       conf?.actionKind === 'confirmed_existing',
                   );
                   const hasId = Boolean(agent.idDocId);
-                  const hasContract = Boolean(agent.contractDocId);
 
                   return (
                     <tr
@@ -535,16 +532,6 @@ export function AgentsDirectoryView({
                       <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
                         <span className={hasId ? 'text-emerald-700' : 'text-red-700'}>
                           ID {hasId ? '✓' : '×'}
-                        </span>
-                        <span aria-hidden="true" className="mx-1.5 text-slate-300">
-                          /
-                        </span>
-                        <span
-                          className={
-                            hasContract ? 'text-emerald-700' : 'text-red-700'
-                          }
-                        >
-                          Contract {hasContract ? '✓' : '×'}
                         </span>
                         <span aria-hidden="true" className="mx-1.5 text-slate-300">
                           /

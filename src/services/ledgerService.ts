@@ -19,6 +19,7 @@ import {
   serverTimestamp,
   setDoc,
   terminate,
+  Timestamp,
   updateDoc,
   where,
   writeBatch,
@@ -46,6 +47,7 @@ import {
   TShirtSize,
   TShirtStyle,
   UserAccount,
+  UserAccountStatus,
   UserRole,
   VerificationStatus,
 } from '../types';
@@ -53,6 +55,7 @@ import {
   buildFieldDiffs,
   getAgentFullName,
   getCutoffDateString,
+  toMillis,
 } from '../utils/cycleUtils';
 
 function sanitizeStr(val: string | undefined, max: number): string {
@@ -262,21 +265,53 @@ export async function ensureUserProfile(
   );
   const userRef = doc(db, 'users', uid);
 
+  const parsedSignInMs = firebaseUser.metadata.lastSignInTime
+    ? Date.parse(firebaseUser.metadata.lastSignInTime)
+    : Date.now();
+  const authSignInMs = Number.isFinite(parsedSignInMs)
+    ? parsedSignInMs
+    : Date.now();
+  const authSignInTs = Timestamp.fromMillis(authSignInMs);
+
   let account: UserAccount;
   try {
     const snap = await getDoc(userRef);
     if (snap.exists()) {
       account = snap.data() as UserAccount;
       if (
+        account.accountStatus === 'disabled' ||
+        account.accountStatus === 'archived'
+      ) {
+        return account;
+      }
+
+      const shouldPromoteBootstrappedAdmin =
         firebaseUser.emailVerified &&
         email === BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase() &&
-        account.role !== 'admin'
-      ) {
-        await updateDoc(userRef, {
-          role: 'admin',
+        account.role !== 'admin';
+      const existingSignInMs = account.lastSignInAt
+        ? toMillis(account.lastSignInAt)
+        : 0;
+      const shouldSyncLastSignIn =
+        !account.lastSignInAt ||
+        Math.abs(authSignInMs - existingSignInMs) >= 1000;
+
+      if (shouldPromoteBootstrappedAdmin || shouldSyncLastSignIn) {
+        const patch: Record<string, unknown> = {
           updatedAt: serverTimestamp(),
-        });
-        account = { ...account, role: 'admin' };
+        };
+        if (shouldPromoteBootstrappedAdmin) {
+          patch.role = 'admin';
+        }
+        if (shouldSyncLastSignIn) {
+          patch.lastSignInAt = authSignInTs;
+        }
+        await updateDoc(userRef, patch);
+        account = {
+          ...account,
+          ...(shouldPromoteBootstrappedAdmin ? { role: 'admin' as UserRole } : {}),
+          ...(shouldSyncLastSignIn ? { lastSignInAt: authSignInTs } : {}),
+        };
       }
     } else {
       const initialRole: UserRole =
@@ -291,8 +326,10 @@ export async function ensureUserProfile(
         role: initialRole,
         teamLeaderName: '',
         linkedAgentId: '',
+        accountStatus: 'active' as UserAccountStatus,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        lastSignInAt: authSignInTs,
       };
       await setDoc(userRef, newProfile);
       account = newProfile as unknown as UserAccount;
@@ -426,10 +463,7 @@ async function provisionAgentAuthAccount(
   const appName = `provision_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const secondaryApp = initializeApp(firebaseConfig, appName);
   const secondaryAuth = getAuth(secondaryApp);
-  const secondaryDb = getFirestore(
-    secondaryApp,
-    firebaseConfig.firestoreDatabaseId,
-  );
+  let secondaryDb: Firestore | null = null;
 
   const tempPassword = generateTempPassword(12);
   let createdUser: User | null = null;
@@ -477,6 +511,13 @@ async function provisionAgentAuthAccount(
       displayName: sanitizeStr(fullName, 120),
     }).catch(() => {});
 
+    await secondaryAuth.authStateReady();
+    await createdUser.getIdToken(true);
+    secondaryDb = getFirestore(
+      secondaryApp,
+      firebaseConfig.firestoreDatabaseId,
+    );
+
     return {
       secondaryApp,
       secondaryAuth,
@@ -490,7 +531,9 @@ async function provisionAgentAuthAccount(
     };
   } catch (err) {
     await signOut(secondaryAuth).catch(() => {});
-    await terminate(secondaryDb).catch(() => {});
+    if (secondaryDb) {
+      await terminate(secondaryDb).catch(() => {});
+    }
     await deleteApp(secondaryApp).catch(() => {});
     throw err;
   }
@@ -546,33 +589,35 @@ export async function createAgentWithDocsAndLog(
     FIELD_LIMITS.email,
   );
 
-  const batch = writeBatch(targetDb);
+  const docWrites: Array<{ id: string; payload: Record<string, unknown> }> = [];
 
   let idDocId = '';
   let idDocName = '';
   if (input.idFile) {
     idDocId = makeId('doc_id');
     idDocName = sanitizeStr(input.idFile.fileName, 200);
-    const idDocPayload = {
-      docId: idDocId,
-      agentId,
-      ownerUid,
-      emailAddress,
-      cerebusTeamLeader: sanitizeStr(
-        input.cerebusTeamLeader,
-        FIELD_LIMITS.cerebusTeamLeader,
-      ),
-      docCategory: 'id_passport' as DocCategory,
-      cycleMonth: '',
-      fileName: idDocName,
-      mimeType: sanitizeStr(input.idFile.mimeType, 100),
-      fileSize: input.idFile.fileSize,
-      dataUrl: input.idFile.dataUrl,
-      uploadedByUid: actorUid,
-      uploadedByName: effectiveActorName,
-      uploadedAt: serverTimestamp(),
-    };
-    batch.set(doc(targetDb, 'agent_documents', idDocId), idDocPayload);
+    docWrites.push({
+      id: idDocId,
+      payload: {
+        docId: idDocId,
+        agentId,
+        ownerUid,
+        emailAddress,
+        cerebusTeamLeader: sanitizeStr(
+          input.cerebusTeamLeader,
+          FIELD_LIMITS.cerebusTeamLeader,
+        ),
+        docCategory: 'id_passport' as DocCategory,
+        cycleMonth: '',
+        fileName: idDocName,
+        mimeType: sanitizeStr(input.idFile.mimeType, 100),
+        fileSize: input.idFile.fileSize,
+        dataUrl: input.idFile.dataUrl,
+        uploadedByUid: actorUid,
+        uploadedByName: effectiveActorName,
+        uploadedAt: serverTimestamp(),
+      },
+    });
   }
 
   let contractDocId = '';
@@ -580,29 +625,28 @@ export async function createAgentWithDocsAndLog(
   if (input.contractFile) {
     contractDocId = makeId('doc_ct');
     contractDocName = sanitizeStr(input.contractFile.fileName, 200);
-    const contractDocPayload = {
-      docId: contractDocId,
-      agentId,
-      ownerUid,
-      emailAddress,
-      cerebusTeamLeader: sanitizeStr(
-        input.cerebusTeamLeader,
-        FIELD_LIMITS.cerebusTeamLeader,
-      ),
-      docCategory: 'contract' as DocCategory,
-      cycleMonth: '',
-      fileName: contractDocName,
-      mimeType: sanitizeStr(input.contractFile.mimeType, 100),
-      fileSize: input.contractFile.fileSize,
-      dataUrl: input.contractFile.dataUrl,
-      uploadedByUid: actorUid,
-      uploadedByName: effectiveActorName,
-      uploadedAt: serverTimestamp(),
-    };
-    batch.set(
-      doc(targetDb, 'agent_documents', contractDocId),
-      contractDocPayload,
-    );
+    docWrites.push({
+      id: contractDocId,
+      payload: {
+        docId: contractDocId,
+        agentId,
+        ownerUid,
+        emailAddress,
+        cerebusTeamLeader: sanitizeStr(
+          input.cerebusTeamLeader,
+          FIELD_LIMITS.cerebusTeamLeader,
+        ),
+        docCategory: 'contract' as DocCategory,
+        cycleMonth: '',
+        fileName: contractDocName,
+        mimeType: sanitizeStr(input.contractFile.mimeType, 100),
+        fileSize: input.contractFile.fileSize,
+        dataUrl: input.contractFile.dataUrl,
+        uploadedByUid: actorUid,
+        uploadedByName: effectiveActorName,
+        uploadedAt: serverTimestamp(),
+      },
+    });
   }
 
   let bankDocId = '';
@@ -610,26 +654,28 @@ export async function createAgentWithDocsAndLog(
   if (input.bankFile) {
     bankDocId = makeId('doc_bk');
     bankDocName = sanitizeStr(input.bankFile.fileName, 200);
-    const bankDocPayload = {
-      docId: bankDocId,
-      agentId,
-      ownerUid,
-      emailAddress,
-      cerebusTeamLeader: sanitizeStr(
-        input.cerebusTeamLeader,
-        FIELD_LIMITS.cerebusTeamLeader,
-      ),
-      docCategory: 'bank_statement' as DocCategory,
-      cycleMonth,
-      fileName: bankDocName,
-      mimeType: sanitizeStr(input.bankFile.mimeType, 100),
-      fileSize: input.bankFile.fileSize,
-      dataUrl: input.bankFile.dataUrl,
-      uploadedByUid: actorUid,
-      uploadedByName: effectiveActorName,
-      uploadedAt: serverTimestamp(),
-    };
-    batch.set(doc(targetDb, 'agent_documents', bankDocId), bankDocPayload);
+    docWrites.push({
+      id: bankDocId,
+      payload: {
+        docId: bankDocId,
+        agentId,
+        ownerUid,
+        emailAddress,
+        cerebusTeamLeader: sanitizeStr(
+          input.cerebusTeamLeader,
+          FIELD_LIMITS.cerebusTeamLeader,
+        ),
+        docCategory: 'bank_statement' as DocCategory,
+        cycleMonth,
+        fileName: bankDocName,
+        mimeType: sanitizeStr(input.bankFile.mimeType, 100),
+        fileSize: input.bankFile.fileSize,
+        dataUrl: input.bankFile.dataUrl,
+        uploadedByUid: actorUid,
+        uploadedByName: effectiveActorName,
+        uploadedAt: serverTimestamp(),
+      },
+    });
   }
 
   let photoDocId = '';
@@ -639,26 +685,28 @@ export async function createAgentWithDocsAndLog(
     photoDocId = makeId('doc_ph');
     photoDocName = sanitizeStr(input.photoFile.fileName, 200);
     photoThumbUrl = sanitizeStr(input.photoFile.thumbDataUrl, 80000);
-    const photoDocPayload = {
-      docId: photoDocId,
-      agentId,
-      ownerUid,
-      emailAddress,
-      cerebusTeamLeader: sanitizeStr(
-        input.cerebusTeamLeader,
-        FIELD_LIMITS.cerebusTeamLeader,
-      ),
-      docCategory: 'profile_photo' as DocCategory,
-      cycleMonth: '',
-      fileName: photoDocName,
-      mimeType: sanitizeStr(input.photoFile.mimeType, 100),
-      fileSize: input.photoFile.fileSize,
-      dataUrl: input.photoFile.dataUrl,
-      uploadedByUid: actorUid,
-      uploadedByName: effectiveActorName,
-      uploadedAt: serverTimestamp(),
-    };
-    batch.set(doc(targetDb, 'agent_documents', photoDocId), photoDocPayload);
+    docWrites.push({
+      id: photoDocId,
+      payload: {
+        docId: photoDocId,
+        agentId,
+        ownerUid,
+        emailAddress,
+        cerebusTeamLeader: sanitizeStr(
+          input.cerebusTeamLeader,
+          FIELD_LIMITS.cerebusTeamLeader,
+        ),
+        docCategory: 'profile_photo' as DocCategory,
+        cycleMonth: '',
+        fileName: photoDocName,
+        mimeType: sanitizeStr(input.photoFile.mimeType, 100),
+        fileSize: input.photoFile.fileSize,
+        dataUrl: input.photoFile.dataUrl,
+        uploadedByUid: actorUid,
+        uploadedByName: effectiveActorName,
+        uploadedAt: serverTimestamp(),
+      },
+    });
   }
 
   const agentPayload = {
@@ -718,18 +766,6 @@ export async function createAgentWithDocsAndLog(
     status: options?.selfSignup || options?.publicSignup ? 'active' : input.status,
   };
 
-  batch.set(doc(targetDb, 'agents', agentId), agentPayload);
-
-  if (dupCheck.bankKey) {
-    batch.set(doc(targetDb, 'bank_registry', dupCheck.bankKey), {
-      bankKey: dupCheck.bankKey,
-      agentId,
-      ownerUid,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-  }
-
   const confirmationId = `${agentId}_${cycleMonth}`;
   const verificationStatus: VerificationStatus = 'confirmed';
 
@@ -763,32 +799,6 @@ export async function createAgentWithDocsAndLog(
     verifiedAt: '',
     reviewerNotes: '',
   };
-  batch.set(
-    doc(targetDb, 'monthly_confirmations', confirmationId),
-    confirmationPayload,
-  );
-
-  if (options?.publicSignup && provisioned) {
-    batch.set(doc(targetDb, 'users', provisioned.user.uid), {
-      uid: provisioned.user.uid,
-      email: provisioned.credentials.authEmail,
-      displayName: sanitizeStr(fullName, 120),
-      role: 'agent',
-      teamLeaderName: '',
-      linkedAgentId: agentId,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-  } else if (
-    options?.selfSignup &&
-    !options?.publicSignup &&
-    actor.role === 'agent'
-  ) {
-    batch.update(doc(targetDb, 'users', actor.uid), {
-      linkedAgentId: agentId,
-      updatedAt: serverTimestamp(),
-    });
-  }
 
   const logId = makeId('log');
   const changes: AuditChangeItem[] = [
@@ -836,16 +846,6 @@ export async function createAgentWithDocsAndLog(
       newValue: photoDocName,
     });
   }
-  if (input.contractTermsAcceptedAt) {
-    changes.push({
-      field: 'Contract & Terms and Conditions',
-      previousValue: '(pending)',
-      newValue: sanitizeStr(
-        `Accepted (${input.contractTermsAcceptedAt})`,
-        200,
-      ),
-    });
-  }
   if (provisioned) {
     changes.push({
       field: 'Agent portal login',
@@ -854,34 +854,38 @@ export async function createAgentWithDocsAndLog(
     });
   }
 
-  batch.set(doc(targetDb, 'audit_logs', logId), {
-    logId,
-    timestamp: serverTimestamp(),
-    actorUid,
-    actorName: effectiveActorName,
-    actorEmail: effectiveActorEmail,
-    actorRole: options?.publicSignup ? 'agent' : actor.role,
-    agentId,
-    ownerUid,
-    emailAddress,
-    agentCode: agentPayload.cerebusAgentCode,
-    agentName: sanitizeStr(fullName, 200),
-    cerebusTeamLeader: agentPayload.cerebusTeamLeader,
-    actionType: 'agent_created' as AuditActionType,
-    cycleMonth,
-    isLateAfterCutoff: false,
-    summary: sanitizeStr(
-      options?.publicSignup
-        ? `${fullName} submitted onboarding registration for ${agentPayload.cerebusAgentCode} via public signup link.`
-        : `${actor.displayName} onboarded agent ${agentPayload.cerebusAgentCode} (${fullName}).`,
-      FIELD_LIMITS.summary,
-    ),
-    changes: changes.slice(0, 30),
-  });
-
+  let currentWritePath = `agents/${agentId}`;
   try {
-    await batch.commit();
+    // Commit 1: Core agent record + user profile (keeps Firestore rule lookups minimal)
+    const coreBatch = writeBatch(targetDb);
+    coreBatch.set(doc(targetDb, 'agents', agentId), agentPayload);
+    if (options?.publicSignup && provisioned) {
+      coreBatch.set(doc(targetDb, 'users', provisioned.user.uid), {
+        uid: provisioned.user.uid,
+        email: provisioned.credentials.authEmail,
+        displayName: sanitizeStr(fullName, 120),
+        role: 'agent',
+        teamLeaderName: '',
+        linkedAgentId: agentId,
+        accountStatus: 'active' as UserAccountStatus,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } else if (
+      options?.selfSignup &&
+      !options?.publicSignup &&
+      actor.role === 'agent'
+    ) {
+      coreBatch.update(doc(targetDb, 'users', actor.uid), {
+        linkedAgentId: agentId,
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await coreBatch.commit();
+
+    // If staff created this agent, register the newly provisioned portal login doc on secondaryDb
     if (!options?.publicSignup && provisioned) {
+      currentWritePath = `users/${provisioned.user.uid}`;
       await setDoc(doc(provisioned.secondaryDb, 'users', provisioned.user.uid), {
         uid: provisioned.user.uid,
         email: provisioned.credentials.authEmail,
@@ -889,10 +893,65 @@ export async function createAgentWithDocsAndLog(
         role: 'agent',
         teamLeaderName: '',
         linkedAgentId: agentId,
+        accountStatus: 'active' as UserAccountStatus,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
     }
+
+    // Commit 2: Compliance documents (chunked at 3 docs max per batch so rule lookups stay well under 20)
+    for (let i = 0; i < docWrites.length; i += 3) {
+      const chunk = docWrites.slice(i, i + 3);
+      currentWritePath = `agent_documents/${chunk[0].id}`;
+      const docsBatch = writeBatch(targetDb);
+      for (const entry of chunk) {
+        docsBatch.set(doc(targetDb, 'agent_documents', entry.id), entry.payload);
+      }
+      await docsBatch.commit();
+    }
+
+    // Commit 3: Bank uniqueness index + initial confirmation + audit log (<= 3 docs)
+    currentWritePath = `monthly_confirmations/${confirmationId}`;
+    const ledgerBatch = writeBatch(targetDb);
+    if (dupCheck.bankKey) {
+      ledgerBatch.set(doc(targetDb, 'bank_registry', dupCheck.bankKey), {
+        bankKey: dupCheck.bankKey,
+        agentId,
+        ownerUid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+    ledgerBatch.set(
+      doc(targetDb, 'monthly_confirmations', confirmationId),
+      confirmationPayload,
+    );
+    ledgerBatch.set(doc(targetDb, 'audit_logs', logId), {
+      logId,
+      timestamp: serverTimestamp(),
+      actorUid,
+      actorName: effectiveActorName,
+      actorEmail: effectiveActorEmail,
+      actorRole: options?.publicSignup ? 'agent' : actor.role,
+      agentId,
+      ownerUid,
+      emailAddress,
+      agentCode: agentPayload.cerebusAgentCode,
+      agentName: sanitizeStr(fullName, 200),
+      cerebusTeamLeader: agentPayload.cerebusTeamLeader,
+      actionType: 'agent_created' as AuditActionType,
+      cycleMonth,
+      isLateAfterCutoff: false,
+      summary: sanitizeStr(
+        options?.publicSignup
+          ? `${fullName} submitted onboarding registration for ${agentPayload.cerebusAgentCode} via public signup link.`
+          : `${actor.displayName} onboarded agent ${agentPayload.cerebusAgentCode} (${fullName}).`,
+        FIELD_LIMITS.summary,
+      ),
+      changes: changes.slice(0, 30),
+    });
+    await ledgerBatch.commit();
+
     return {
       agentId,
       credentials: provisioned?.credentials ?? null,
@@ -901,7 +960,7 @@ export async function createAgentWithDocsAndLog(
     if (provisioned) {
       await provisioned.user.delete().catch(() => {});
     }
-    throw handleFirestoreError(error, OperationType.WRITE, `agents/${agentId}`);
+    throw handleFirestoreError(error, OperationType.WRITE, currentWritePath);
   } finally {
     if (provisioned) {
       await signOut(provisioned.secondaryAuth).catch(() => {});
@@ -1623,8 +1682,8 @@ export async function batchVerifyMonthlyPayments(
   const actorName = sanitizeStr(actor.displayName, 120);
   const actorEmail = sanitizeStr(actor.email, FIELD_LIMITS.email);
 
-  // 2 Firestore writes per confirmation (update confirmation + create audit log); chunk at 200 (400 ops <= 500 batch limit)
-  const CHUNK_SIZE = 200;
+  // 2 Firestore writes per confirmation (update confirmation + create audit log); chunk at 4 (8 ops <= 20 rule lookup limit)
+  const CHUNK_SIZE = 4;
   for (let i = 0; i < uniquePending.length; i += CHUNK_SIZE) {
     const chunk = uniquePending.slice(i, i + CHUNK_SIZE);
     const batch = writeBatch(db);
@@ -1760,6 +1819,139 @@ export async function updateUserRole(
     handleFirestoreError(
       error,
       OperationType.UPDATE,
+      `users/${targetUser.uid}`,
+    );
+  }
+}
+
+function assertMutableTargetUser(targetUser: UserAccount, actor: UserAccount) {
+  if (actor.role !== 'admin') {
+    throw new Error('Only Administrators can manage user accounts.');
+  }
+  if (targetUser.uid === actor.uid) {
+    throw new Error('You cannot disable, archive, or delete your own active admin account.');
+  }
+  if (
+    targetUser.email.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase()
+  ) {
+    throw new Error('The primary bootstrapped administrator account is protected.');
+  }
+}
+
+export async function updateUserAccountStatus(
+  targetUser: UserAccount,
+  nextStatus: UserAccountStatus,
+  actor: UserAccount,
+): Promise<void> {
+  assertMutableTargetUser(targetUser, actor);
+  const previousStatus: UserAccountStatus = targetUser.accountStatus || 'active';
+  if (previousStatus === nextStatus) return;
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'users', targetUser.uid), {
+    accountStatus: nextStatus,
+    updatedAt: serverTimestamp(),
+  });
+
+  const actionLabel =
+    nextStatus === 'disabled'
+      ? 'disabled'
+      : nextStatus === 'archived'
+        ? 'archived'
+        : 'restored to active';
+
+  const logId = makeId('log');
+  batch.set(doc(db, 'audit_logs', logId), {
+    logId,
+    timestamp: serverTimestamp(),
+    actorUid: actor.uid,
+    actorName: sanitizeStr(actor.displayName, 120),
+    actorEmail: sanitizeStr(actor.email, FIELD_LIMITS.email),
+    actorRole: actor.role,
+    agentId: targetUser.linkedAgentId || 'system_access',
+    ownerUid: targetUser.uid,
+    emailAddress: targetUser.email,
+    agentCode: 'ACCESS',
+    agentName: targetUser.displayName,
+    cerebusTeamLeader: sanitizeStr(
+      targetUser.teamLeaderName || 'Operations',
+      120,
+    ),
+    actionType: 'user_status_updated' as AuditActionType,
+    cycleMonth: '',
+    isLateAfterCutoff: false,
+    summary: sanitizeStr(
+      `${actor.displayName} ${actionLabel} user account ${targetUser.email}.`,
+      FIELD_LIMITS.summary,
+    ),
+    changes: [
+      {
+        field: 'Account status',
+        previousValue: previousStatus,
+        newValue: nextStatus,
+      },
+    ],
+  });
+
+  try {
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(
+      error,
+      OperationType.UPDATE,
+      `users/${targetUser.uid}`,
+    );
+  }
+}
+
+export async function deleteUserAccount(
+  targetUser: UserAccount,
+  actor: UserAccount,
+): Promise<void> {
+  assertMutableTargetUser(targetUser, actor);
+
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'users', targetUser.uid));
+
+  const logId = makeId('log');
+  batch.set(doc(db, 'audit_logs', logId), {
+    logId,
+    timestamp: serverTimestamp(),
+    actorUid: actor.uid,
+    actorName: sanitizeStr(actor.displayName, 120),
+    actorEmail: sanitizeStr(actor.email, FIELD_LIMITS.email),
+    actorRole: actor.role,
+    agentId: targetUser.linkedAgentId || 'system_access',
+    ownerUid: targetUser.uid,
+    emailAddress: targetUser.email,
+    agentCode: 'ACCESS',
+    agentName: targetUser.displayName,
+    cerebusTeamLeader: sanitizeStr(
+      targetUser.teamLeaderName || 'Operations',
+      120,
+    ),
+    actionType: 'user_status_updated' as AuditActionType,
+    cycleMonth: '',
+    isLateAfterCutoff: false,
+    summary: sanitizeStr(
+      `${actor.displayName} deleted user account ${targetUser.email} (${targetUser.role}).`,
+      FIELD_LIMITS.summary,
+    ),
+    changes: [
+      {
+        field: 'User account',
+        previousValue: `${targetUser.email} (${targetUser.accountStatus || 'active'})`,
+        newValue: 'deleted',
+      },
+    ],
+  });
+
+  try {
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(
+      error,
+      OperationType.DELETE,
       `users/${targetUser.uid}`,
     );
   }

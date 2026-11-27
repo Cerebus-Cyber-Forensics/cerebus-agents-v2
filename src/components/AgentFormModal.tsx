@@ -36,7 +36,6 @@ import {
 } from '../types';
 import { getAgentFullName } from '../utils/cycleUtils';
 import { processProfilePhotoFile, processUploadFile } from '../utils/fileUtils';
-import { ContractTermsModal } from './ContractTermsModal';
 import {
   ExpandedPhotoTarget,
   PhotoLightboxModal,
@@ -165,7 +164,6 @@ export function AgentFormModal({
   const [busyUpload, setBusyUpload] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
-  const [showContractPopup, setShowContractPopup] = useState(false);
   const [fileFlag, setFileFlag] = useState('');
   const [error, setError] = useState('');
   const [checkingDuplicateBank, setCheckingDuplicateBank] = useState(false);
@@ -292,7 +290,7 @@ export function AgentFormModal({
     }
   };
 
-  const executeSubmission = async (acceptedAt?: string) => {
+  const executeSubmission = async () => {
     setError('');
     setSubmitting(true);
     try {
@@ -370,12 +368,10 @@ export function AgentFormModal({
             bankFile,
             idFile,
             photoFile,
-            contractTermsAcceptedAt: acceptedAt,
           },
           effectiveActor,
           { selfSignup, publicSignup },
         );
-        setShowContractPopup(false);
         const upperCode = cerebusAgentCode.trim().toUpperCase();
         onSuccess(
           selfSignup || publicSignup
@@ -405,7 +401,6 @@ export function AgentFormModal({
       }
       onClose?.();
     } catch (err) {
-      setShowContractPopup(false);
       setError(err instanceof Error ? err.message : 'Failed to save agent record.');
     } finally {
       setSubmitting(false);
@@ -484,9 +479,6 @@ export function AgentFormModal({
       } finally {
         setCheckingDuplicateBank(false);
       }
-
-      setShowContractPopup(true);
-      return;
     }
 
     await executeSubmission();
@@ -1090,24 +1082,6 @@ export function AgentFormModal({
     </form>
   );
 
-  const contractPopup = (
-    <ContractTermsModal
-      open={showContractPopup}
-      submitting={submitting}
-      agentCode={cerebusAgentCode.trim().toUpperCase()}
-      fullName={getAgentFullName({ firstName, middleNames, surname })}
-      idPassportNumber={idPassportNumber}
-      geographicArea={geographicArea}
-      teamLeader={cerebusTeamLeader}
-      bankNameAndCode={bankNameAndCode}
-      accountType={accountType}
-      accountNumber={accountNumber}
-      cycleMonth={activeCycle}
-      onCancel={() => setShowContractPopup(false)}
-      onAccept={() => void executeSubmission(new Date().toISOString())}
-    />
-  );
-
   if (isInlineSignup) {
     return (
       <>
@@ -1122,7 +1096,6 @@ export function AgentFormModal({
           </div>
           {formContent}
         </div>
-        {contractPopup}
         <PhotoLightboxModal
           target={expandedPhoto}
           onClose={() => setExpandedPhoto(null)}
@@ -1295,7 +1268,6 @@ export function AgentFormModal({
           {formContent}
         </div>
       </div>
-      {contractPopup}
       <PhotoLightboxModal
         target={expandedPhoto}
         onClose={() => setExpandedPhoto(null)}

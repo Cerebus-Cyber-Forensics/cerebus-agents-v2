@@ -18,6 +18,7 @@ const ACTION_LABELS: Record<AuditActionType, string> = {
   payment_verified: 'Banking Verified',
   payment_rejected: 'Correction Requested',
   role_updated: 'Access Role Updated',
+  user_status_updated: 'User Status Updated',
 };
 
 export function AuditTrailView({

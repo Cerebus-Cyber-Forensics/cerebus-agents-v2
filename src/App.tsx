@@ -53,6 +53,7 @@ import {
   UserAccount,
 } from './types';
 import { getCurrentCycleMonth } from './utils/cycleUtils';
+import { getUserRoleTheme } from './utils/roleTheme';
 
 type NavView = 'overview' | 'agents' | 'verify' | 'audit' | 'access';
 
@@ -146,8 +147,57 @@ function LedgerDashboard() {
   useEffect(() => {
     if (!userAccount || isInviteSignupMode) return;
 
-    setDataLoading(true);
+    const isInactiveAccount =
+      userAccount.accountStatus === 'disabled' ||
+      userAccount.accountStatus === 'archived';
+
+    if (isInactiveAccount) {
+      setAgents([]);
+      setConfirmations([]);
+      setAuditLogs([]);
+      setPlatformUsers([]);
+      setDataLoading(false);
+    }
+
     const unsubs: (() => void)[] = [];
+
+    // Always watch the signed-in user's profile doc for live role/status changes
+    unsubs.push(
+      onSnapshot(
+        doc(db, 'users', userAccount.uid),
+        (snap) => {
+          if (snap.exists()) {
+            const updated = snap.data() as UserAccount;
+            if (
+              updated.role !== userAccount.role ||
+              (updated.accountStatus || 'active') !==
+                (userAccount.accountStatus || 'active') ||
+              (updated.teamLeaderName || '') !==
+                (userAccount.teamLeaderName || '')
+            ) {
+              setUserAccount(updated);
+            }
+          } else {
+            // Account was deleted by an administrator
+            void signOut(auth);
+          }
+        },
+        (err) =>
+          handleFirestoreError(
+            err,
+            OperationType.GET,
+            `users/${userAccount.uid}`,
+          ),
+      ),
+    );
+
+    if (isInactiveAccount) {
+      return () => {
+        for (const u of unsubs) u();
+      };
+    }
+
+    setDataLoading(true);
 
     const buildQuery = (colName: string) => {
       const colRef = collection(db, colName);
@@ -227,28 +277,6 @@ function LedgerDashboard() {
           (err) => handleFirestoreError(err, OperationType.LIST, 'users'),
         ),
       );
-    } else if (
-      ADMIN_ACTIVATION_EMAILS.includes(userAccount.email.toLowerCase())
-    ) {
-      unsubs.push(
-        onSnapshot(
-          doc(db, 'users', userAccount.uid),
-          (snap) => {
-            if (snap.exists()) {
-              const updated = snap.data() as UserAccount;
-              if (updated.role !== userAccount.role) {
-                setUserAccount(updated);
-              }
-            }
-          },
-          (err) =>
-            handleFirestoreError(
-              err,
-              OperationType.GET,
-              `users/${userAccount.uid}`,
-            ),
-        ),
-      );
     }
 
     return () => {
@@ -296,8 +324,53 @@ function LedgerDashboard() {
     return <LoginGate />;
   }
 
+  if (
+    userAccount.accountStatus === 'disabled' ||
+    userAccount.accountStatus === 'archived'
+  ) {
+    const isArchived = userAccount.accountStatus === 'archived';
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white border border-slate-200 rounded-xl p-6 sm:p-8 space-y-5 text-center">
+          <div className="w-11 h-11 rounded-full bg-red-50 border border-red-200 text-red-700 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div className="space-y-1.5">
+            <h1 className="text-lg font-semibold text-slate-900">
+              {isArchived ? 'Account Archived' : 'Account Disabled'}
+            </h1>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Access for <span className="font-medium text-slate-900">{userAccount.email}</span> has been{' '}
+              {isArchived ? 'archived' : 'disabled'} by a Cerebus administrator. Please contact operations if you need your access restored.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void signOut(auth)}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const isStaff =
     userAccount.role === 'admin' || userAccount.role === 'team_leader';
+  const roleTheme = getUserRoleTheme(userAccount.role);
+  const profileInitials = (
+    userAccount.displayName ||
+    userAccount.email ||
+    'U'
+  )
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0])
+    .join('')
+    .toUpperCase();
 
   const navItems: { id: NavView; label: string; icon: typeof LayoutDashboard }[] =
     isStaff
@@ -375,22 +448,39 @@ function LedgerDashboard() {
         </nav>
 
         <div className="p-4 border-t border-slate-200 space-y-3">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-slate-900 truncate">
-              {userAccount.displayName}
-            </p>
-            <p className="text-xs text-slate-500 truncate">
-              {userAccount.email}
-            </p>
-            <p className="text-xs text-slate-600 mt-1">
-              Role:{' '}
-              <span className="font-medium text-slate-900 capitalize">
-                {userAccount.role.replace('_', ' ')}
-              </span>
-              {userAccount.teamLeaderName
-                ? ` · ${userAccount.teamLeaderName}`
-                : ''}
-            </p>
+          <div
+            className={`rounded-xl border p-3 transition-colors ${roleTheme.cardBg} ${roleTheme.cardBorder}`}
+          >
+            <div className="flex items-start gap-2.5 min-w-0">
+              <div
+                className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold shrink-0 ${roleTheme.avatarBg}`}
+              >
+                {profileInitials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p
+                  className={`text-sm font-semibold truncate ${roleTheme.nameText}`}
+                >
+                  {userAccount.displayName}
+                </p>
+                <p className={`text-xs truncate ${roleTheme.emailText}`}>
+                  {userAccount.email}
+                </p>
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${roleTheme.dotBg}`}
+                  />
+                  <span
+                    className={`text-xs font-semibold truncate ${roleTheme.roleText}`}
+                  >
+                    {roleTheme.label}
+                    {userAccount.teamLeaderName
+                      ? ` · ${userAccount.teamLeaderName}`
+                      : ''}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
           <button
             type="button"
@@ -447,7 +537,30 @@ function LedgerDashboard() {
                 );
               })}
             </nav>
-            <div className="p-4 border-t border-slate-200">
+            <div className="p-4 border-t border-slate-200 space-y-3">
+              <div
+                className={`rounded-xl border p-3 ${roleTheme.cardBg} ${roleTheme.cardBorder}`}
+              >
+                <p
+                  className={`text-sm font-semibold truncate ${roleTheme.nameText}`}
+                >
+                  {userAccount.displayName}
+                </p>
+                <p className={`text-xs truncate ${roleTheme.emailText}`}>
+                  {userAccount.email}
+                </p>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${roleTheme.dotBg}`}
+                  />
+                  <span className={`text-xs font-semibold ${roleTheme.roleText}`}>
+                    {roleTheme.label}
+                    {userAccount.teamLeaderName
+                      ? ` · ${userAccount.teamLeaderName}`
+                      : ''}
+                  </span>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={handleSignOut}
