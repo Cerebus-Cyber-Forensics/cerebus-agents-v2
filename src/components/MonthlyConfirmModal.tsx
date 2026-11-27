@@ -7,6 +7,8 @@ import {
   X,
 } from 'lucide-react';
 import {
+  checkDuplicateBankDetails,
+  DuplicateBankCheckResult,
   submitMonthlyBankConfirmation,
   validateConfirmationWritePermission,
   WritePermissionCheckResult,
@@ -67,6 +69,9 @@ export function MonthlyConfirmModal({
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [permissionCheck, setPermissionCheck] =
     useState<WritePermissionCheckResult | null>(null);
+  const [checkingDuplicateBank, setCheckingDuplicateBank] = useState(false);
+  const [duplicateBankResult, setDuplicateBankResult] =
+    useState<DuplicateBankCheckResult | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -89,6 +94,53 @@ export function MonthlyConfirmModal({
       active = false;
     };
   }, [agent, cycleMonth, existingConfirmation, actor]);
+
+  useEffect(() => {
+    if (mode !== 'updated_banking') {
+      setDuplicateBankResult(null);
+      setCheckingDuplicateBank(false);
+      return;
+    }
+    const trimmed = accountNumber.trim();
+    if (trimmed.length < 4) {
+      setDuplicateBankResult(null);
+      setCheckingDuplicateBank(false);
+      return;
+    }
+
+    let active = true;
+    setCheckingDuplicateBank(true);
+    const timer = window.setTimeout(() => {
+      void checkDuplicateBankDetails(bankNameAndCode, trimmed, {
+        excludeAgentId: agent.agentId,
+        actorRole: actor.role,
+        teamLeaderName: actor.teamLeaderName,
+        includeCollectionScan:
+          actor.role === 'admin' || actor.role === 'team_leader',
+      })
+        .then((res) => {
+          if (!active) return;
+          setDuplicateBankResult(res);
+          setCheckingDuplicateBank(false);
+        })
+        .catch(() => {
+          if (!active) return;
+          setCheckingDuplicateBank(false);
+        });
+    }, 300);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [
+    mode,
+    bankNameAndCode,
+    accountNumber,
+    agent.agentId,
+    actor.role,
+    actor.teamLeaderName,
+  ]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -160,6 +212,33 @@ export function MonthlyConfirmModal({
           `You are not authorized to write to ${permissionCheck.path}.`,
       );
       return;
+    }
+
+    if (mode === 'updated_banking') {
+      setCheckingDuplicateBank(true);
+      try {
+        const dup = await checkDuplicateBankDetails(
+          bankNameAndCode,
+          accountNumber,
+          {
+            excludeAgentId: agent.agentId,
+            actorRole: actor.role,
+            teamLeaderName: actor.teamLeaderName,
+            includeCollectionScan:
+              actor.role === 'admin' || actor.role === 'team_leader',
+          },
+        );
+        setDuplicateBankResult(dup);
+        if (dup.isDuplicate) {
+          setError(
+            dup.reason ||
+              'Duplicate bank details detected: this account number is already registered in the added banks.',
+          );
+          return;
+        }
+      } finally {
+        setCheckingDuplicateBank(false);
+      }
     }
 
     setSubmitting(true);
@@ -358,10 +437,49 @@ export function MonthlyConfirmModal({
                 disabled={mode === 'confirmed_existing'}
                 value={accountNumber}
                 onChange={(e) => setAccountNumber(e.target.value)}
-                className="w-full px-3 py-2 text-sm font-mono tabular-nums border border-slate-200 rounded-lg bg-white disabled:bg-slate-50 disabled:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className={`w-full px-3 py-2 text-sm font-mono tabular-nums border rounded-lg bg-white disabled:bg-slate-50 disabled:text-slate-600 focus:outline-none focus:ring-2 ${
+                  mode === 'updated_banking' && duplicateBankResult?.isDuplicate
+                    ? 'border-red-400 focus:ring-red-500'
+                    : 'border-slate-200 focus:ring-blue-600'
+                }`}
               />
             </div>
           </div>
+
+          {mode === 'updated_banking' && checkingDuplicateBank && (
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Checking added banks for duplicate account number...</span>
+            </div>
+          )}
+
+          {mode === 'updated_banking' &&
+            !checkingDuplicateBank &&
+            duplicateBankResult?.isDuplicate && (
+              <div
+                role="alert"
+                className="flex items-start gap-2.5 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800"
+              >
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Duplicate bank detected:</span>{' '}
+                  {duplicateBankResult.reason}
+                </div>
+              </div>
+            )}
+
+          {mode === 'updated_banking' &&
+            !checkingDuplicateBank &&
+            duplicateBankResult &&
+            !duplicateBankResult.isDuplicate &&
+            duplicateBankResult.bankKey && (
+              <div className="flex items-center gap-2 text-xs text-emerald-700">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  No duplicate found — this bank account number is unique in the ledger.
+                </span>
+              </div>
+            )}
 
           {mode === 'updated_banking' && (
             <div className="space-y-1.5">
@@ -415,7 +533,10 @@ export function MonthlyConfirmModal({
                 submitting ||
                 uploadingFile ||
                 checkingAuth ||
-                (permissionCheck !== null && !permissionCheck.allowed)
+                (permissionCheck !== null && !permissionCheck.allowed) ||
+                (mode === 'updated_banking' &&
+                  (checkingDuplicateBank ||
+                    Boolean(duplicateBankResult?.isDuplicate)))
               }
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0812B8] hover:bg-[#060E94] disabled:opacity-60 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
             >

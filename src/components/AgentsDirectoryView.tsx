@@ -7,6 +7,7 @@ import {
   Plus,
   Search,
   User,
+  X,
 } from 'lucide-react';
 import {
   AgentRecord,
@@ -19,6 +20,7 @@ import {
   maskAccountNumber,
   toMillis,
 } from '../utils/cycleUtils';
+import { downloadCsv } from '../utils/csvUtils';
 import { VerificationStatusLabel } from './StatusLabel';
 import { ExpandedPhotoTarget } from './PhotoLightboxModal';
 
@@ -79,104 +81,127 @@ export function AgentsDirectoryView({
   );
 
   const filteredAgents = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    return agents.filter((agent) => {
-      if (areaFilter !== 'all' && agent.geographicArea !== areaFilter)
-        return false;
-      if (leaderFilter !== 'all' && agent.cerebusTeamLeader !== leaderFilter)
-        return false;
+    const tokens = searchTerm
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
 
-      const conf = cycleConfMap.get(agent.agentId);
-      const effectiveStatus: VerificationStatus =
-        conf?.verificationStatus || 'pending';
-      if (statusFilter !== 'all' && effectiveStatus !== statusFilter)
-        return false;
+    return agents
+      .filter((agent) => {
+        if (areaFilter !== 'all' && agent.geographicArea !== areaFilter)
+          return false;
+        if (leaderFilter !== 'all' && agent.cerebusTeamLeader !== leaderFilter)
+          return false;
 
-      if (!q) return true;
-      const haystack = [
-        agent.cerebusAgentCode,
-        getAgentFullName(agent),
-        agent.emailAddress,
-        agent.geographicArea,
-        agent.cerebusTeamLeader,
-        agent.bankNameAndCode,
-        agent.idPassportNumber,
-      ]
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(q);
-    }).sort((a, b) => toMillis(b.timestamp) - toMillis(a.timestamp));
+        const conf = cycleConfMap.get(agent.agentId);
+        const effectiveStatus: VerificationStatus =
+          conf?.verificationStatus || 'pending';
+        if (statusFilter !== 'all' && effectiveStatus !== statusFilter)
+          return false;
+
+        if (tokens.length === 0) return true;
+        const haystack = [
+          agent.cerebusAgentCode,
+          getAgentFullName(agent),
+          `${agent.firstName || ''} ${agent.surname || ''}`.trim(),
+          agent.emailAddress,
+          agent.email,
+          agent.cerebusTeamLeader,
+          agent.geographicArea,
+          agent.bankNameAndCode,
+          agent.idPassportNumber,
+          agent.cellphoneNumber,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        return tokens.every((token) => haystack.includes(token));
+      })
+      .sort((a, b) => toMillis(b.timestamp) - toMillis(a.timestamp));
   }, [agents, searchTerm, areaFilter, leaderFilter, statusFilter, cycleConfMap]);
 
+  const hasActiveFilters =
+    searchTerm.trim().length > 0 ||
+    areaFilter !== 'all' ||
+    leaderFilter !== 'all' ||
+    statusFilter !== 'all';
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setAreaFilter('all');
+    setLeaderFilter('all');
+    setStatusFilter('all');
+  };
+
   const handleExportCsv = () => {
+    if (filteredAgents.length === 0) return;
+
     const headers = [
-      'Timestamp',
-      'Email Address',
+      'Payment Cycle',
       'Cerebus agent code',
-      'Geographic area',
-      'Cerebus team leader',
+      'Full Name',
       'First name',
       'Middle names',
       'Surname',
+      'Email Address',
+      'Contact Email',
+      'Cellphone number',
+      'Whatsapp number',
+      'Geographic area',
+      'Cerebus team leader',
       'Nationality',
       'ID document type',
       'ID/Passport number',
-      'Cellphone number',
-      'Whatsapp number',
-      'Email',
-      'T-shirt style',
-      'T-shirt size',
-      'Your comments',
       'Bank name and code',
       'Account holder name',
       'Account type',
       'Account number',
       `Cycle ${activeCycle} Status`,
+      'Confirmation Action',
       'Late After 2nd',
+      'Confirmed / Updated At',
+      'Verified By',
+      'Verified At',
+      'Onboarded At',
+      'Your comments',
     ];
-
-    const escapeCsv = (val: string) =>
-      `"${(val || '').replace(/"/g, '""')}"`;
 
     const rows = filteredAgents.map((a) => {
       const conf = cycleConfMap.get(a.agentId);
       return [
-        formatTimestamp(a.timestamp),
-        a.emailAddress,
+        activeCycle,
         a.cerebusAgentCode,
-        a.geographicArea,
-        a.cerebusTeamLeader,
+        getAgentFullName(a),
         a.firstName,
         a.middleNames,
         a.surname,
+        a.emailAddress,
+        a.email,
+        a.cellphoneNumber,
+        a.whatsappNumber,
+        a.geographicArea,
+        a.cerebusTeamLeader,
         a.nationality,
         a.idDocumentType,
         a.idPassportNumber,
-        a.cellphoneNumber,
-        a.whatsappNumber,
-        a.email,
-        a.tShirtStyle,
-        a.tShirtSize,
-        a.yourComments,
-        a.bankNameAndCode,
-        a.accountHolderName,
-        a.accountType,
-        a.accountNumber,
+        conf?.bankNameAndCode || a.bankNameAndCode,
+        conf?.accountHolderName || a.accountHolderName,
+        conf?.accountType || a.accountType,
+        conf?.accountNumber || a.accountNumber,
         conf?.verificationStatus || 'pending',
+        conf?.actionKind || '',
         conf?.isLateAfterCutoff ? 'YES' : 'NO',
-      ]
-        .map((cell) => escapeCsv(String(cell)))
-        .join(',');
+        conf ? formatTimestamp(conf.updatedAt || conf.submittedAt) : '',
+        conf?.verifiedByName || '',
+        conf?.verifiedAt || '',
+        formatTimestamp(a.timestamp),
+        a.yourComments,
+      ];
     });
 
-    const csv = [headers.map(escapeCsv).join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `cerebus_agents_${activeCycle}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(`cerebus_agents_payroll_${activeCycle}.csv`, headers, rows);
   };
 
   return (
@@ -184,15 +209,28 @@ export function AgentsDirectoryView({
       {/* Toolbar */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div className="flex flex-1 flex-wrap items-center gap-2.5">
-          <div className="relative flex-1 min-w-[220px] max-w-sm">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <div className="relative flex-1 min-w-[240px] max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
+              role="searchbox"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search code, name, email, bank..."
-              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+              placeholder="Search by name, email, or team leader..."
+              aria-label="Search agents by name, email, or assigned team leader"
+              className="w-full pl-9 pr-8 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                aria-label="Clear search query"
+                title="Clear search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           <select
@@ -267,14 +305,40 @@ export function AgentsDirectoryView({
 
           <button
             type="button"
+            disabled={filteredAgents.length === 0}
             onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+            title={`Export ${filteredAgents.length} filtered agent record(s) for payroll`}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-40 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Export CSV</span>
+            <span>Export to CSV</span>
           </button>
         </div>
       </div>
+
+      {hasActiveFilters && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-slate-500">
+          <span>
+            Showing{' '}
+            <span className="font-mono tabular-nums font-semibold text-slate-800">
+              {filteredAgents.length}
+            </span>{' '}
+            of{' '}
+            <span className="font-mono tabular-nums font-semibold text-slate-800">
+              {agents.length}
+            </span>{' '}
+            agents
+          </span>
+          <button
+            type="button"
+            onClick={handleClearFilters}
+            className="inline-flex items-center gap-1 text-xs font-medium text-[#0812B8] hover:underline cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+            Clear filters
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -287,6 +351,16 @@ export function AgentsDirectoryView({
               Add a new Cerebus agent, share the onboarding signup link, or clear your search filters.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2.5">
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Clear Filters
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onAddAgent}

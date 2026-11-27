@@ -168,7 +168,7 @@ service cloud.firestore {
         && data.cellphoneNumber is string && data.cellphoneNumber.size() >= 5 && data.cellphoneNumber.size() <= 40
         && data.whatsappNumber is string && data.whatsappNumber.size() <= 40
         && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
-        && data.tShirtStyle in ['Crew Neck', 'Golf / Polo', 'Fitted Tee', 'Long Sleeve', 'Hoodie']
+        && data.tShirtStyle in ['Male', 'Female']
         && data.tShirtSize in ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL']
         && data.yourComments is string && data.yourComments.size() <= 1000
         && data.bankNameAndCode is string && data.bankNameAndCode.size() >= 2 && data.bankNameAndCode.size() <= 120
@@ -297,6 +297,17 @@ service cloud.firestore {
         && data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 500
         && data.changes is list && data.changes.size() <= 30
         && (data.changes.size() == 0 || data.changes[0] is map);
+    }
+
+    function isValidBankRegistry(data) {
+      return data.keys().hasAll(['bankKey', 'agentId', 'ownerUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['bankKey', 'agentId', 'ownerUid', 'createdAt', 'updatedAt'])
+        && isValidId(data.bankKey)
+        && data.bankKey.matches('^bk_[a-f0-9]{64}$')
+        && isValidId(data.agentId)
+        && data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
     }
 
     // -------------------------------------------------------------------------
@@ -564,6 +575,41 @@ service cloud.firestore {
 
       allow update: if false;
       allow delete: if isAdmin() && isValidId(logId);
+    }
+
+    match /bank_registry/{bankKey} {
+      allow get: if isValidId(bankKey) && bankKey.matches('^bk_[a-f0-9]{64}$');
+      allow list: if isAdmin();
+
+      allow create: if isValidId(bankKey)
+        && bankKey.matches('^bk_[a-f0-9]{64}$')
+        && isValidBankRegistry(incoming())
+        && incoming().bankKey == bankKey
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && agentExistsOrCreatedInBatch(incoming().agentId)
+        && (
+          (
+            isSignedIn()
+            && isAuthorizedToWriteAgentPath(incoming().agentId)
+          ) ||
+          (
+            isNewAgentBatchCreate(incoming().agentId)
+            && incoming().ownerUid == 'public_signup'
+          )
+        );
+
+      allow update: if false;
+
+      allow delete: if isValidId(bankKey)
+        && bankKey.matches('^bk_[a-f0-9]{64}$')
+        && (
+          isAdmin() ||
+          (
+            isSignedIn()
+            && isAuthorizedToWriteAgentPath(existing().agentId)
+          )
+        );
     }
   }
 }

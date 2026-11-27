@@ -6,12 +6,7 @@ export type IdDocumentType =
   | "Driver's License"
   | 'Asylum / Permit';
 
-export type TShirtStyle =
-  | 'Crew Neck'
-  | 'Golf / Polo'
-  | 'Fitted Tee'
-  | 'Long Sleeve'
-  | 'Hoodie';
+export type TShirtStyle = 'Male' | 'Female';
 
 export type TShirtSize = 'XS' | 'S' | 'M' | 'L' | 'XL' | '2XL' | '3XL';
 
@@ -209,13 +204,7 @@ export const ID_DOCUMENT_TYPES: IdDocumentType[] = [
   'Asylum / Permit',
 ];
 
-export const TSHIRT_STYLES: TShirtStyle[] = [
-  'Crew Neck',
-  'Golf / Polo',
-  'Fitted Tee',
-  'Long Sleeve',
-  'Hoodie',
-];
+export const TSHIRT_STYLES: TShirtStyle[] = ['Male', 'Female'];
 
 export const TSHIRT_SIZES: TShirtSize[] = [
   'XS',

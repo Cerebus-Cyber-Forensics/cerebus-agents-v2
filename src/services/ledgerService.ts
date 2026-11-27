@@ -92,6 +92,163 @@ export const BANKING_FIELD_LABELS: Record<string, string> = {
   accountNumber: 'Account number',
 };
 
+export function normalizeAccountNumber(accountNumber: string): string {
+  return (accountNumber || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+}
+
+export async function computeBankRegistryKey(
+  accountNumber: string,
+): Promise<string> {
+  const normalized = normalizeAccountNumber(accountNumber);
+  const encoded = new TextEncoder().encode(normalized);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+  const hashHex = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `bk_${hashHex}`;
+}
+
+export interface DuplicateBankCheckResult {
+  isDuplicate: boolean;
+  normalizedAccountNumber: string;
+  bankKey: string;
+  matchedAgentId?: string;
+  matchedAgentCode?: string;
+  matchedBankName?: string;
+  reason?: string;
+}
+
+export async function checkDuplicateBankDetails(
+  _bankNameAndCode: string,
+  accountNumber: string,
+  options?: {
+    excludeAgentId?: string;
+    actorRole?: UserRole;
+    teamLeaderName?: string;
+    includeCollectionScan?: boolean;
+  },
+): Promise<DuplicateBankCheckResult> {
+  const normalized = normalizeAccountNumber(accountNumber);
+  if (normalized.length < 4) {
+    return {
+      isDuplicate: false,
+      normalizedAccountNumber: normalized,
+      bankKey: '',
+    };
+  }
+
+  const bankKey = await computeBankRegistryKey(normalized);
+
+  try {
+    const regSnap = await getDoc(doc(db, 'bank_registry', bankKey));
+    if (regSnap.exists()) {
+      const reg = regSnap.data() as { agentId?: string };
+      if (!options?.excludeAgentId || reg.agentId !== options.excludeAgentId) {
+        let matchedAgentCode: string | undefined;
+        let matchedBankName: string | undefined;
+
+        if (
+          reg.agentId &&
+          (options?.actorRole === 'admin' || options?.actorRole === 'team_leader')
+        ) {
+          try {
+            const agentSnap = await getDoc(doc(db, 'agents', reg.agentId));
+            if (agentSnap.exists()) {
+              const matched = agentSnap.data() as AgentRecord;
+              matchedAgentCode = matched.cerebusAgentCode;
+              matchedBankName = matched.bankNameAndCode;
+            }
+          } catch {
+            // Non-readable cross-team agent; omit PII details
+          }
+        }
+
+        const detailSuffix = matchedAgentCode
+          ? ` (assigned to ${matchedAgentCode}${matchedBankName ? ` · ${matchedBankName}` : ''})`
+          : '';
+
+        return {
+          isDuplicate: true,
+          normalizedAccountNumber: normalized,
+          bankKey,
+          matchedAgentId: reg.agentId,
+          matchedAgentCode,
+          matchedBankName,
+          reason: `Duplicate bank details detected: this account number is already registered in the added banks${detailSuffix}.`,
+        };
+      }
+    }
+  } catch {
+    // If registry check fails transiently, fall through to collection scan when permitted
+  }
+
+  if (options?.includeCollectionScan && auth.currentUser) {
+    try {
+      if (options.actorRole === 'admin') {
+        const agentsSnap = await getDocs(collection(db, 'agents'));
+        for (const docSnap of agentsSnap.docs) {
+          const existingAgent = docSnap.data() as AgentRecord;
+          if (
+            options.excludeAgentId &&
+            existingAgent.agentId === options.excludeAgentId
+          ) {
+            continue;
+          }
+          if (normalizeAccountNumber(existingAgent.accountNumber) === normalized) {
+            return {
+              isDuplicate: true,
+              normalizedAccountNumber: normalized,
+              bankKey,
+              matchedAgentId: existingAgent.agentId,
+              matchedAgentCode: existingAgent.cerebusAgentCode,
+              matchedBankName: existingAgent.bankNameAndCode,
+              reason: `Duplicate bank details detected: this account number is already registered in the added banks (${existingAgent.cerebusAgentCode} · ${existingAgent.bankNameAndCode}).`,
+            };
+          }
+        }
+      } else if (
+        options.actorRole === 'team_leader' &&
+        options.teamLeaderName
+      ) {
+        const agentsSnap = await getDocs(
+          query(
+            collection(db, 'agents'),
+            where('cerebusTeamLeader', '==', options.teamLeaderName),
+          ),
+        );
+        for (const docSnap of agentsSnap.docs) {
+          const existingAgent = docSnap.data() as AgentRecord;
+          if (
+            options.excludeAgentId &&
+            existingAgent.agentId === options.excludeAgentId
+          ) {
+            continue;
+          }
+          if (normalizeAccountNumber(existingAgent.accountNumber) === normalized) {
+            return {
+              isDuplicate: true,
+              normalizedAccountNumber: normalized,
+              bankKey,
+              matchedAgentId: existingAgent.agentId,
+              matchedAgentCode: existingAgent.cerebusAgentCode,
+              matchedBankName: existingAgent.bankNameAndCode,
+              reason: `Duplicate bank details detected: this account number is already registered in the added banks (${existingAgent.cerebusAgentCode} · ${existingAgent.bankNameAndCode}).`,
+            };
+          }
+        }
+      }
+    } catch {
+      // Ignore unauthorized collection scan fallback
+    }
+  }
+
+  return {
+    isDuplicate: false,
+    normalizedAccountNumber: normalized,
+    bankKey,
+  };
+}
+
 export async function ensureUserProfile(
   firebaseUser: User,
 ): Promise<UserAccount> {
@@ -354,6 +511,22 @@ export async function createAgentWithDocsAndLog(
   const cycleMonth = input.cycleMonth;
   const cutoff = getCutoffStatus(cycleMonth);
 
+  const dupCheck = await checkDuplicateBankDetails(
+    input.bankNameAndCode,
+    input.accountNumber,
+    {
+      actorRole: options?.publicSignup ? undefined : actor.role,
+      teamLeaderName: actor.teamLeaderName,
+      includeCollectionScan: !options?.publicSignup && !options?.selfSignup,
+    },
+  );
+  if (dupCheck.isDuplicate) {
+    throw new Error(
+      dupCheck.reason ||
+        'Duplicate bank details detected: this account number is already registered in the added banks.',
+    );
+  }
+
   const shouldProvisionLogin = !options?.selfSignup;
   const provisioned = shouldProvisionLogin
     ? await provisionAgentAuthAccount(input.cerebusAgentCode, fullName)
@@ -548,6 +721,16 @@ export async function createAgentWithDocsAndLog(
   };
 
   batch.set(doc(targetDb, 'agents', agentId), agentPayload);
+
+  if (dupCheck.bankKey) {
+    batch.set(doc(targetDb, 'bank_registry', dupCheck.bankKey), {
+      bankKey: dupCheck.bankKey,
+      agentId,
+      ownerUid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  }
 
   // Create initial monthly confirmation record for the selected cycle
   const confirmationId = `${agentId}_${cycleMonth}`;
@@ -1137,6 +1320,24 @@ export async function submitMonthlyBankConfirmation(
   const actualActionKind: ActionKind =
     bankDiffs.length > 0 ? 'updated_banking' : actionKind;
 
+  const dupCheck = await checkDuplicateBankDetails(
+    nextBank.bankNameAndCode,
+    nextBank.accountNumber,
+    {
+      excludeAgentId: agent.agentId,
+      actorRole: actor.role,
+      teamLeaderName: actor.teamLeaderName,
+      includeCollectionScan:
+        actor.role === 'admin' || actor.role === 'team_leader',
+    },
+  );
+  if (dupCheck.isDuplicate) {
+    throw new Error(
+      dupCheck.reason ||
+        'Duplicate bank details detected: this account number is already registered in the added banks.',
+    );
+  }
+
   const batch = writeBatch(db);
   const agentFullName = sanitizeStr(
     getAgentFullName(agent) || agent.emailAddress || agent.cerebusAgentCode,
@@ -1256,6 +1457,34 @@ export async function submitMonthlyBankConfirmation(
       agentUpdate.latestBankDocName = bankDocName;
     }
     batch.update(doc(db, 'agents', agent.agentId), agentUpdate);
+  }
+
+  if (dupCheck.bankKey) {
+    const oldBankKey =
+      normalizeAccountNumber(agent.accountNumber).length >= 4
+        ? await computeBankRegistryKey(agent.accountNumber)
+        : '';
+
+    const newRegSnap = await getDoc(doc(db, 'bank_registry', dupCheck.bankKey));
+    if (!newRegSnap.exists()) {
+      batch.set(doc(db, 'bank_registry', dupCheck.bankKey), {
+        bankKey: dupCheck.bankKey,
+        agentId: agent.agentId,
+        ownerUid: resolvedOwnerUid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    if (oldBankKey && oldBankKey !== dupCheck.bankKey) {
+      const oldRegSnap = await getDoc(doc(db, 'bank_registry', oldBankKey));
+      if (
+        oldRegSnap.exists() &&
+        (oldRegSnap.data() as { agentId?: string }).agentId === agent.agentId
+      ) {
+        batch.delete(doc(db, 'bank_registry', oldBankKey));
+      }
+    }
   }
 
   const auditChanges: AuditChangeItem[] =
@@ -1517,14 +1746,21 @@ export async function resetAllLedgerData(
   }
 
   try {
-    const [agentsSnap, confsSnap, docsSnap, logsSnap, agentUsersSnap] =
-      await Promise.all([
-        getDocs(collection(db, 'agents')),
-        getDocs(collection(db, 'monthly_confirmations')),
-        getDocs(collection(db, 'agent_documents')),
-        getDocs(collection(db, 'audit_logs')),
-        getDocs(query(collection(db, 'users'), where('role', '==', 'agent'))),
-      ]);
+    const [
+      agentsSnap,
+      confsSnap,
+      docsSnap,
+      logsSnap,
+      agentUsersSnap,
+      bankRegistrySnap,
+    ] = await Promise.all([
+      getDocs(collection(db, 'agents')),
+      getDocs(collection(db, 'monthly_confirmations')),
+      getDocs(collection(db, 'agent_documents')),
+      getDocs(collection(db, 'audit_logs')),
+      getDocs(query(collection(db, 'users'), where('role', '==', 'agent'))),
+      getDocs(collection(db, 'bank_registry')),
+    ]);
 
     const refs = [
       ...agentsSnap.docs.map((d) => d.ref),
@@ -1532,6 +1768,7 @@ export async function resetAllLedgerData(
       ...docsSnap.docs.map((d) => d.ref),
       ...logsSnap.docs.map((d) => d.ref),
       ...agentUsersSnap.docs.map((d) => d.ref),
+      ...bankRegistrySnap.docs.map((d) => d.ref),
     ];
 
     const BATCH_LIMIT = 450;

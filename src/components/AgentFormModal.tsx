@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   Camera,
@@ -12,7 +12,9 @@ import {
   X,
 } from 'lucide-react';
 import {
+  checkDuplicateBankDetails,
   createAgentWithDocsAndLog,
+  DuplicateBankCheckResult,
   updateAgentPersonalInfoAndDocs,
 } from '../services/ledgerService';
 import {
@@ -129,7 +131,9 @@ export function AgentFormModal({
       (selfSignup && !publicSignup && actor ? actor.email : ''),
   );
   const [tShirtStyle, setTShirtStyle] = useState<TShirtStyle>(
-    initialAgent?.tShirtStyle || 'Golf / Polo',
+    initialAgent?.tShirtStyle && TSHIRT_STYLES.includes(initialAgent.tShirtStyle)
+      ? initialAgent.tShirtStyle
+      : 'Male',
   );
   const [tShirtSize, setTShirtSize] = useState<TShirtSize>(
     initialAgent?.tShirtSize || 'M',
@@ -164,6 +168,9 @@ export function AgentFormModal({
   const [showContractPopup, setShowContractPopup] = useState(false);
   const [fileFlag, setFileFlag] = useState('');
   const [error, setError] = useState('');
+  const [checkingDuplicateBank, setCheckingDuplicateBank] = useState(false);
+  const [duplicateBankResult, setDuplicateBankResult] =
+    useState<DuplicateBankCheckResult | null>(null);
   const [createdReceipt, setCreatedReceipt] = useState<{
     agentCode: string;
     fullName: string;
@@ -172,6 +179,48 @@ export function AgentFormModal({
   const [copiedField, setCopiedField] = useState('');
   const [expandedPhoto, setExpandedPhoto] =
     useState<ExpandedPhotoTarget | null>(null);
+
+  useEffect(() => {
+    if (isEdit) return;
+    const trimmed = accountNumber.trim();
+    if (trimmed.length < 4) {
+      setDuplicateBankResult(null);
+      setCheckingDuplicateBank(false);
+      return;
+    }
+
+    let active = true;
+    setCheckingDuplicateBank(true);
+    const timer = window.setTimeout(() => {
+      void checkDuplicateBankDetails(bankNameAndCode, trimmed, {
+        actorRole: publicSignup ? undefined : actor?.role,
+        teamLeaderName: actor?.teamLeaderName,
+        includeCollectionScan: !publicSignup && !selfSignup,
+      })
+        .then((res) => {
+          if (!active) return;
+          setDuplicateBankResult(res);
+          setCheckingDuplicateBank(false);
+        })
+        .catch(() => {
+          if (!active) return;
+          setCheckingDuplicateBank(false);
+        });
+    }, 300);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [
+    isEdit,
+    bankNameAndCode,
+    accountNumber,
+    publicSignup,
+    selfSignup,
+    actor?.role,
+    actor?.teamLeaderName,
+  ]);
 
   const copyCredential = async (key: string, text: string) => {
     try {
@@ -414,6 +463,29 @@ export function AgentFormModal({
     }
 
     if (!isEdit) {
+      setCheckingDuplicateBank(true);
+      try {
+        const dup = await checkDuplicateBankDetails(
+          bankNameAndCode,
+          accountNumber,
+          {
+            actorRole: publicSignup ? undefined : actor?.role,
+            teamLeaderName: actor?.teamLeaderName,
+            includeCollectionScan: !publicSignup && !selfSignup,
+          },
+        );
+        setDuplicateBankResult(dup);
+        if (dup.isDuplicate) {
+          setError(
+            dup.reason ||
+              'Duplicate bank details detected: this account number is already registered in the added banks.',
+          );
+          return;
+        }
+      } finally {
+        setCheckingDuplicateBank(false);
+      }
+
       setShowContractPopup(true);
       return;
     }
@@ -840,10 +912,46 @@ export function AgentFormModal({
                 maxLength={FIELD_LIMITS.accountNumber}
                 value={accountNumber}
                 onChange={(e) => setAccountNumber(e.target.value)}
-                className="w-full px-3 py-2 text-sm font-mono tabular-nums border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className={`w-full px-3 py-2 text-sm font-mono tabular-nums border rounded-lg bg-white focus:outline-none focus:ring-2 ${
+                  duplicateBankResult?.isDuplicate
+                    ? 'border-red-400 focus:ring-red-500'
+                    : 'border-slate-200 focus:ring-blue-600'
+                }`}
               />
             </div>
           </div>
+
+          {checkingDuplicateBank && (
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Checking added banks for duplicate account number...</span>
+            </div>
+          )}
+
+          {!checkingDuplicateBank && duplicateBankResult?.isDuplicate && (
+            <div
+              role="alert"
+              className="flex items-start gap-2.5 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800"
+            >
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold">Duplicate bank detected:</span>{' '}
+                {duplicateBankResult.reason}
+              </div>
+            </div>
+          )}
+
+          {!checkingDuplicateBank &&
+            duplicateBankResult &&
+            !duplicateBankResult.isDuplicate &&
+            duplicateBankResult.bankKey && (
+              <div className="flex items-center gap-2 text-xs text-emerald-700">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  No duplicate found — this bank account number is unique in the ledger.
+                </span>
+              </div>
+            )}
         </section>
       )}
 
@@ -962,7 +1070,12 @@ export function AgentFormModal({
         )}
         <button
           type="submit"
-          disabled={submitting || busyUpload !== null}
+          disabled={
+            submitting ||
+            busyUpload !== null ||
+            (!isEdit &&
+              (checkingDuplicateBank || Boolean(duplicateBankResult?.isDuplicate)))
+          }
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0812B8] hover:bg-[#060E94] disabled:opacity-60 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
         >
           {submitting && <Loader2 className="w-4 h-4 animate-spin" />}

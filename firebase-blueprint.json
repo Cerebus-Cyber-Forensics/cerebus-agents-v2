@@ -154,7 +154,7 @@
         "tShirtStyle": {
           "type": "string",
           "description": "Uniform T-shirt style preference.",
-          "enum": ["Crew Neck", "Golf / Polo", "Fitted Tee", "Long Sleeve", "Hoodie"],
+          "enum": ["Male", "Female"],
           "maxLength": 40
         },
         "tShirtSize": {
@@ -667,6 +667,40 @@
         "summary",
         "changes"
       ]
+    },
+    "BankRegistry": {
+      "title": "BankRegistry",
+      "description": "PII-free SHA-256 hashed bank account uniqueness index preventing duplicate bank details across agents.",
+      "type": "object",
+      "properties": {
+        "bankKey": {
+          "type": "string",
+          "description": "Deterministic SHA-256 key bk_<hex> derived from the normalized account number.",
+          "pattern": "^bk_[a-f0-9]{64}$",
+          "maxLength": 67
+        },
+        "agentId": {
+          "type": "string",
+          "description": "Agent dossier ID currently holding this bank account.",
+          "maxLength": 140
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "Firebase UID of the agent owner or public_signup.",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when registered."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest registry write."
+        }
+      },
+      "required": ["bankKey", "agentId", "ownerUid", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -689,6 +723,10 @@
     "/audit_logs/{logId}": {
       "schema": { "$ref": "#/entities/AuditLogEntry" },
       "description": "Append-only paper trail logging who changed what and when."
+    },
+    "/bank_registry/{bankKey}": {
+      "schema": { "$ref": "#/entities/BankRegistry" },
+      "description": "Hashed bank account uniqueness registry for duplicate prevention."
     }
   }
 }

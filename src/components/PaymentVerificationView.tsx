@@ -14,6 +14,7 @@ import {
   UserAccount,
 } from '../types';
 import { formatCycleLabel, formatTimestamp } from '../utils/cycleUtils';
+import { downloadCsv } from '../utils/csvUtils';
 import { VerificationStatusLabel } from './StatusLabel';
 
 interface PaymentVerificationViewProps {
@@ -106,6 +107,72 @@ export function PaymentVerificationView({
     }
   };
 
+  const handleExportFilteredCsv = () => {
+    if (filtered.length === 0) return;
+
+    const headers = [
+      'Cycle',
+      'Agent Code',
+      'Agent Name',
+      'Team Leader',
+      'Geographic Area',
+      'Email Address',
+      'Cellphone',
+      'Bank Name and Code',
+      'Account Holder Name',
+      'Account Type',
+      'Account Number',
+      'Confirmation Action',
+      'Verification Status',
+      'Late After 2nd',
+      'Cutoff Date',
+      'Submitted By',
+      'Submitted At',
+      'Bank Proof File',
+      'Previous Bank Summary',
+      'Verified By',
+      'Verified At',
+      'Reviewer Notes',
+    ];
+
+    const rows = filtered.map((c) => {
+      const matchedAgent = agents.find((a) => a.agentId === c.agentId);
+      return [
+        c.cycleMonth,
+        c.agentCode,
+        c.agentName,
+        c.cerebusTeamLeader,
+        c.geographicArea,
+        c.emailAddress,
+        matchedAgent?.cellphoneNumber || '',
+        c.bankNameAndCode,
+        c.accountHolderName,
+        c.accountType,
+        c.accountNumber,
+        c.actionKind,
+        c.verificationStatus,
+        c.isLateAfterCutoff ? 'YES' : 'NO',
+        c.cutoffDate,
+        c.submittedByName,
+        formatTimestamp(c.updatedAt || c.submittedAt),
+        c.bankDocName || '',
+        c.previousBankSummary || '',
+        c.verifiedByName || '',
+        c.verifiedAt || '',
+        c.reviewerNotes || '',
+      ];
+    });
+
+    downloadCsv(
+      `cerebus_payroll_verification_${activeCycle}_${filter}.csv`,
+      headers,
+      rows,
+    );
+    onToast(
+      `Exported ${filtered.length} ${filter.replace('_', ' ')} record(s) for ${activeCycle} to CSV.`,
+    );
+  };
+
   const handleExportVerifiedBatch = () => {
     const headers = [
       'Cycle',
@@ -121,36 +188,23 @@ export function PaymentVerificationView({
       'Verified By',
       'Verified At',
     ];
-    const escapeCsv = (val: string) =>
-      `"${(val || '').replace(/"/g, '""')}"`;
 
-    const rows = verifiedList.map((c) =>
-      [
-        c.cycleMonth,
-        c.agentCode,
-        c.agentName,
-        c.cerebusTeamLeader,
-        c.geographicArea,
-        c.bankNameAndCode,
-        c.accountHolderName,
-        c.accountType,
-        c.accountNumber,
-        c.isLateAfterCutoff ? 'YES' : 'NO',
-        c.verifiedByName || '',
-        c.verifiedAt || '',
-      ]
-        .map(escapeCsv)
-        .join(','),
-    );
+    const rows = verifiedList.map((c) => [
+      c.cycleMonth,
+      c.agentCode,
+      c.agentName,
+      c.cerebusTeamLeader,
+      c.geographicArea,
+      c.bankNameAndCode,
+      c.accountHolderName,
+      c.accountType,
+      c.accountNumber,
+      c.isLateAfterCutoff ? 'YES' : 'NO',
+      c.verifiedByName || '',
+      c.verifiedAt || '',
+    ]);
 
-    const csv = [headers.map(escapeCsv).join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `cerebus_verified_payouts_${activeCycle}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(`cerebus_verified_payouts_${activeCycle}.csv`, headers, rows);
   };
 
   const counts = {
@@ -199,15 +253,28 @@ export function PaymentVerificationView({
           ))}
         </div>
 
-        <button
-          type="button"
-          disabled={verifiedList.length === 0}
-          onClick={handleExportVerifiedBatch}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-40 rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0"
-        >
-          <Download className="w-3.5 h-3.5" />
-          <span>Export Verified Payouts ({verifiedList.length})</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            disabled={filtered.length === 0}
+            onClick={handleExportFilteredCsv}
+            title={`Export ${filtered.length} currently filtered record(s) for payroll`}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-40 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export to CSV</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={verifiedList.length === 0}
+            onClick={handleExportVerifiedBatch}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-40 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export Verified Payouts ({verifiedList.length})</span>
+          </button>
+        </div>
       </div>
 
       {error && (
