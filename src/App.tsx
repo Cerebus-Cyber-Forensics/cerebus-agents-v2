@@ -562,6 +562,7 @@ function LedgerDashboard() {
                   onConfirmBanking={(agent, cycleMonth, existingConf) =>
                     setConfirmModal({ agent, cycleMonth, existingConf })
                   }
+                  onToast={showToast}
                 />
               )}
 

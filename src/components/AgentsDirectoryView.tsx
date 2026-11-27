@@ -37,6 +37,7 @@ interface AgentsDirectoryViewProps {
     cycleMonth: string,
     existingConf?: MonthlyConfirmation | null,
   ) => void;
+  onToast?: (message: string) => void;
 }
 
 export function AgentsDirectoryView({
@@ -48,6 +49,7 @@ export function AgentsDirectoryView({
   onViewAgent,
   onExpandPhoto,
   onConfirmBanking,
+  onToast,
 }: AgentsDirectoryViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [areaFilter, setAreaFilter] = useState('all');
@@ -141,6 +143,7 @@ export function AgentsDirectoryView({
     const headers = [
       'Payment Cycle',
       'Cerebus agent code',
+      'Agent Status',
       'Full Name',
       'First name',
       'Middle names',
@@ -154,10 +157,15 @@ export function AgentsDirectoryView({
       'Nationality',
       'ID document type',
       'ID/Passport number',
+      'T-shirt style',
+      'T-shirt size',
       'Bank name and code',
       'Account holder name',
       'Account type',
       'Account number',
+      'ID Document On File',
+      'Contract On File',
+      `Cycle ${activeCycle} Bank Doc`,
       `Cycle ${activeCycle} Status`,
       'Confirmation Action',
       'Late After 2nd',
@@ -173,6 +181,7 @@ export function AgentsDirectoryView({
       return [
         activeCycle,
         a.cerebusAgentCode,
+        a.status,
         getAgentFullName(a),
         a.firstName,
         a.middleNames,
@@ -186,10 +195,15 @@ export function AgentsDirectoryView({
         a.nationality,
         a.idDocumentType,
         a.idPassportNumber,
+        a.tShirtStyle,
+        a.tShirtSize,
         conf?.bankNameAndCode || a.bankNameAndCode,
         conf?.accountHolderName || a.accountHolderName,
         conf?.accountType || a.accountType,
         conf?.accountNumber || a.accountNumber,
+        a.idDocName || (a.idDocId ? 'Yes' : 'No'),
+        a.contractDocName || (a.contractDocId ? 'Yes' : 'No'),
+        conf?.bankDocName || '',
         conf?.verificationStatus || 'pending',
         conf?.actionKind || '',
         conf?.isLateAfterCutoff ? 'YES' : 'NO',
@@ -201,7 +215,15 @@ export function AgentsDirectoryView({
       ];
     });
 
-    downloadCsv(`cerebus_agents_payroll_${activeCycle}.csv`, headers, rows);
+    const filterSuffix = hasActiveFilters ? '_filtered' : '';
+    downloadCsv(
+      `cerebus_agents_records_${activeCycle}${filterSuffix}.csv`,
+      headers,
+      rows,
+    );
+    onToast?.(
+      `Exported ${filteredAgents.length} filtered agent record(s) to CSV.`,
+    );
   };
 
   return (
@@ -307,11 +329,11 @@ export function AgentsDirectoryView({
             type="button"
             disabled={filteredAgents.length === 0}
             onClick={handleExportCsv}
-            title={`Export ${filteredAgents.length} filtered agent record(s) for payroll`}
+            title={`Export ${filteredAgents.length} filtered agent record(s) to CSV`}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-40 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Export to CSV</span>
+            <span>Export to CSV ({filteredAgents.length})</span>
           </button>
         </div>
       </div>
