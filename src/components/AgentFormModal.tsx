@@ -125,10 +125,6 @@ export function AgentFormModal({
   const [whatsappNumber, setWhatsappNumber] = useState(
     initialAgent?.whatsappNumber || '',
   );
-  const [email, setEmail] = useState(
-    initialAgent?.email ||
-      (selfSignup && !publicSignup && actor ? actor.email : ''),
-  );
   const [tShirtStyle, setTShirtStyle] = useState<TShirtStyle>(
     initialAgent?.tShirtStyle && TSHIRT_STYLES.includes(initialAgent.tShirtStyle)
       ? initialAgent.tShirtStyle
@@ -310,7 +306,7 @@ export function AgentFormModal({
             idPassportNumber,
             cellphoneNumber,
             whatsappNumber,
-            email,
+            email: emailAddress.trim() || initialAgent.email,
             tShirtStyle,
             tShirtSize,
             yourComments,
@@ -355,7 +351,7 @@ export function AgentFormModal({
             idPassportNumber,
             cellphoneNumber,
             whatsappNumber,
-            email,
+            email: emailAddress,
             tShirtStyle,
             tShirtSize,
             yourComments,
@@ -749,7 +745,7 @@ export function AgentFormModal({
             02. Contact Channels, T-Shirt Kit & Comments
           </h3>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">
               Cellphone number
@@ -776,19 +772,6 @@ export function AgentFormModal({
               onChange={(e) => setWhatsappNumber(e.target.value)}
               placeholder="+27 82 000 0000"
               className="w-full px-3 py-2 text-sm font-mono tabular-nums border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
-              Email (Contact / Payslip)
-            </label>
-            <input
-              type="email"
-              required
-              maxLength={FIELD_LIMITS.email}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
           </div>
           <div>
@@ -823,7 +806,7 @@ export function AgentFormModal({
               ))}
             </select>
           </div>
-          <div className="sm:col-span-3">
+          <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-slate-700 mb-1">
               Your comments
             </label>
